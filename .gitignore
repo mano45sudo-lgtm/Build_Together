@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Local environment files & secrets (never commit real credentials)
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs & temp
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Local agent/tool state (machine-specific; Impeccable hooks live here)
+.claude/settings.local.json
+.impeccable/config.local.json

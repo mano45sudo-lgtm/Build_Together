@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+
+/*
+ * Foundational design tokens for BuildTogether (premium dark). These are the starting
+ * values from DESIGN.md; Impeccable's new-work flow will formalize/extend them once real
+ * UI begins. Kept intentionally small in Phase 0.
+ */
+@theme {
+  --color-canvas: #0b0d10;
+  --color-surface-1: #121519;
+  --color-surface-2: #191d23;
+  --color-subtle: #262b33;
+  --color-primary: #e7eaf0;
+  --color-secondary: #9aa3b2;
+  --color-muted: #6b7383;
+  --color-accent: #4c8dff;
+  --color-accent-hover: #3d7bf0;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-primary);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

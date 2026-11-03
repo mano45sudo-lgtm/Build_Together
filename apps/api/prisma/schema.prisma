@@ -1,0 +1,21 @@
+// BuildTogether Prisma schema — Phase 0 compatibility scaffold ONLY.
+//
+// Deliberately contains no models: the data model (User, Workspace, Membership, Project,
+// Task, Decision, …) is designed and migrated in the database phase, not Phase 0. This
+// file exists so Prisma can be validated/generated against the pinned stable version and
+// so migrations start from an agreed datasource.
+//
+// Prisma 7 compatibility note: the datasource `url` property is no longer supported in
+// the schema file. The connection URL now lives in `prisma.config.ts` (for the Migrate
+// CLI) and is provided to the client at runtime. See docs/architecture/database-
+// architecture.md.
+//
+// See the database-engineering skill.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

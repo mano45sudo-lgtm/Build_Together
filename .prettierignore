@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+.vite
+pnpm-lock.yaml
+*.tsbuildinfo
+.claude
+playwright-report
+test-results
