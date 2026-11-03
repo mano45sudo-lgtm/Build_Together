@@ -14,6 +14,9 @@ export default tseslint.config(
       '**/build/**',
       '**/coverage/**',
       '**/.vite/**',
+      '**/out/**',
+      '**/dist-electron/**',
+      'release/**',
       '.claude/**',
       'playwright-report/**',
       'test-results/**',
@@ -37,13 +40,22 @@ export default tseslint.config(
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // TypeScript already checks undefined identifiers; avoid double-reporting.
+      'no-undef': 'off',
     },
   },
-  // Frontend package: browser globals + JSX
+  // Desktop renderer: browser globals + JSX
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['apps/desktop/src/**/*.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.browser },
+    },
+  },
+  // Desktop Electron host (main + preload): node globals
+  {
+    files: ['apps/desktop/electron/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
   // Backend package: node globals

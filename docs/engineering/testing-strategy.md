@@ -9,7 +9,7 @@ Vitest (unit/integration/component) and Playwright (E2E). Tests live near the co
 | ----------- | ------------------------ | ------------------------------- | ------------------------------------------------------ |
 | Unit        | Vitest                   | `**/*.test.ts(x)` beside source | Pure logic, services (mocked repos), hooks, utils      |
 | Integration | Vitest                   | `apps/api`                      | Routes vs a test DB, service↔repository, error handler |
-| Component   | Vitest + Testing Library | `apps/web`                      | Render states, interactions, a11y roles                |
+| Component   | Vitest + Testing Library | `apps/desktop/src` (renderer)   | Render states, interactions, a11y roles                |
 | E2E         | Playwright               | `e2e/`                          | Critical user journeys in a real browser               |
 | Regression  | either                   | alongside fix                   | Every bug gets a test that failed before the fix       |
 
@@ -36,7 +36,7 @@ concurrent edits, date/timezone boundaries, pagination ends), and **authorizatio
 
 ```
 pnpm test                     # Vitest, all packages
-pnpm --filter @buildtogether/web test
+pnpm --filter @buildtogether/desktop test
 pnpm --filter @buildtogether/api test
 pnpm test:e2e                 # Playwright (after pnpm exec playwright install)
 ```
@@ -55,4 +55,4 @@ matters. Accepted untested risks are recorded in the phase report, never implied
 ## Phase 0 state
 
 Scaffolds include a Vitest config and one trivial smoke test per app so the test toolchain
-is verified to run. Feature tests begin in Phase 1+.
+is verified to run. Feature tests begin in the first functional phase (Phase 2+).

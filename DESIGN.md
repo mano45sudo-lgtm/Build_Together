@@ -22,7 +22,8 @@ clearly connected (chat → work provenance).
 Dark-first. A near-black/blue-black base with layered surfaces, a single restrained accent,
 and a semantic color set used only for meaning (never decoration).
 
-Foundational tokens (Tailwind v4 `@theme` in `apps/web/src/styles/` once UI begins):
+Foundational tokens (Tailwind v4 `@theme` in `apps/desktop/src/styles/index.css` — added
+in Phase 1):
 
 ```
 --bg-canvas:    #0B0D10   /* app background */

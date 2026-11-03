@@ -28,6 +28,33 @@ dependency vulnerabilities.
 - No secret in source/git/bundle/logs. Load + validate env at boot (fail closed). Redact at
   the logger. Only `.env.example` placeholders are committed; `.gitignore` blocks `.env*`.
 
+## Desktop (Electron) hardening
+
+The `apps/desktop` shell is a distinct attack surface; controls (traceable to the official
+Electron security checklist) are enforced in the **main** process — the renderer is treated
+as untrusted:
+
+- **Process isolation:** every `BrowserWindow` sets `contextIsolation: true`,
+  `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`.
+- **Never expose raw IPC/Node:** the sandboxed CommonJS `preload` publishes only the named,
+  typed `window.bt` methods via `contextBridge` — no `ipcRenderer`, `require`, or Node
+  globals cross into the renderer.
+- **Validate every IPC sender:** each `ipcMain` handler asserts
+  `event.senderFrame.origin` equals the trusted renderer origin (`http://localhost:5173` in
+  dev, `app://bundle` in prod) before acting; untrusted frames are rejected. All IPC inputs
+  (e.g. `openExternal(url)`) are type- and scheme-checked; only `https:` opens externally.
+- **Restrictive CSP:** applied via `session.webRequest.onHeadersReceived` and on custom
+  protocol responses — `default-src 'self'`, `script-src 'self'`, `object-src 'none'`,
+  `frame-src 'none'`, `base-uri 'self'`, `form-action 'none'`, `upgrade-insecure-requests`;
+  `connect-src` limited to `'self' https:` (plus the local dev/HMR origins in development).
+- **No unsafe remote content:** renderer is served from a privileged custom `app://` scheme
+  (never `file://`), navigation (`will-navigate`) and new windows
+  (`setWindowOpenHandler`) are denied/validated, and `setPermissionRequestHandler` denies
+  all permission requests.
+- **No secrets in the renderer:** the client receives only non-secret config; API credentials
+  and third-party secrets stay in `apps/api`.
+- **Minimal dependencies:** Electron/electron-vite/electron-builder only; kept on stable.
+
 ## Input, injection & output
 
 - Validate/sanitize all input at the edge (zod); reject unknown fields; clamp sizes.
@@ -37,7 +64,8 @@ dependency vulnerabilities.
 
 ## Network surface
 
-- **CORS:** explicit origin allow-list (the web app origin); never `*` with credentials.
+- **CORS:** explicit origin allow-list (the desktop renderer origin); never `*` with
+  credentials.
 - **Rate limiting** on auth + expensive endpoints (per user + per IP); anti-enumeration on
   login/invite. Security headers: CSP, HSTS, `X-Content-Type-Options`, referrer/permissions
   policy. HTTPS-only outside local.
@@ -60,7 +88,10 @@ Run the `security-review` checklist at the end of every phase touching auth, dat
 secrets, inputs, or network. Findings and any accepted risk are recorded here / in the phase
 report — never left implicit.
 
-## Phase 0 state
+## Phase 1 state
 
-No auth endpoints or uploads exist yet. These guidelines and the skill establish the controls
-that every subsequent phase must satisfy from the moment it introduces the relevant surface.
+No auth endpoints or uploads exist yet. Phase 1 hardened the **desktop surface**: Electron
+process isolation, a typed/validated IPC bridge, CSP, custom-protocol loading, navigation/
+permission/window guards (see `desktop-architecture.md`). These guidelines and the skill
+establish the controls that every subsequent phase must satisfy from the moment it
+introduces the relevant surface.

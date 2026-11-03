@@ -1,25 +1,29 @@
 # BuildTogether
 
-**From Conversation to Completion.** A chat-first team collaboration platform where
-conversations become actionable work — messaging, project channels, conversation-to-task
-conversion, a Kanban board, a Decision Vault, Team Pulse, and AI-assisted summaries, in one
-place instead of scattered across chat, PM and docs tools.
+**From Conversation to Completion.** A **desktop-first** team collaboration product (a
+"Builder Workspace") where conversations become actionable work — messaging, project
+channels, conversation-to-task conversion, a Kanban board, a Decision Vault, Team Pulse, and
+AI-assisted summaries, in one place instead of scattered across chat, PM and docs tools.
 
-> **Status: Phase 0 (engineering environment).** The repository is prepared for development;
-> **no product features are implemented yet.** Work proceeds in explicitly authorized phases.
+> **Status: Phase 1 complete (desktop product foundation).** The Electron client
+> (main/preload/renderer), app shell and design-token foundation are in place with a secure
+> IPC bridge. **No product features are implemented yet** (no auth, workspaces, messaging or
+> tasks). Work proceeds in explicitly authorized phases.
 
 ## Stack
 
-React + Vite + TypeScript + Tailwind CSS (v4) + Motion + Lucide · Node.js + Express +
-TypeScript · PostgreSQL + Prisma · Nexconn Chat SDK (real-time) · pnpm monorepo · ESLint,
-Prettier, Vitest, Playwright. See [`docs/decisions/ADR-0001-technology-stack.md`](docs/decisions/ADR-0001-technology-stack.md).
+**Electron** (main + sandboxed preload) · React + Vite + TypeScript + Tailwind CSS (v4) +
+Motion + Lucide (renderer) · Node.js + Express + TypeScript · PostgreSQL + Prisma · Nexconn
+Chat SDK (real-time, later phase) · pnpm monorepo · ESLint, Prettier, Vitest, Playwright.
+See [`ADR-0001`](docs/decisions/ADR-0001-technology-stack.md) and
+[`ADR-0002`](docs/decisions/ADR-0002-desktop-framework.md).
 
 ## Repository layout
 
 ```
 apps/
-  web/            @buildtogether/web    React/Vite client
-  api/            @buildtogether/api    Express + Prisma service
+  desktop/        @buildtogether/desktop  Electron client (main/preload + React renderer)
+  api/            @buildtogether/api      Express + Prisma service
 packages/
   shared/         @buildtogether/shared shared TS contracts
 e2e/              Playwright specs
@@ -36,13 +40,14 @@ Requires Node ≥ 20 and pnpm ≥ 9.
 
 ```bash
 pnpm install                 # install all workspace deps (repo root)
-cp apps/web/.env.example apps/web/.env
+cp apps/desktop/.env.example apps/desktop/.env
 cp apps/api/.env.example apps/api/.env   # fill local values; never commit .env
-pnpm dev                     # run web + api together
+pnpm --filter @buildtogether/api dev     # API on :4000
+pnpm desktop:dev             # Electron + renderer (HMR on :5173)
 ```
 
-Individual apps: `pnpm --filter @buildtogether/web dev` ·
-`pnpm --filter @buildtogether/api dev`.
+Build the desktop bundles: `pnpm desktop:build` (→ `apps/desktop/out`). Package
+(installers) via `pnpm desktop:package` — configured, not run in Phase 1.
 
 ## Checks
 
@@ -77,10 +82,11 @@ Run `/impeccable init` to (re)establish design context; product truth is capture
 
 ## Phase plan
 
-Phase 0 environment → **1** workspaces/identity/authz → **2** Nexconn real-time →
-**3** conversation→tasks/Kanban → **4** Decision Vault/Team Pulse → **5** AI layer. Each
-phase is gated: it ends with a completion report and waits for explicit authorization to
-continue. See [`docs/development/phase-roadmap.md`](docs/development/phase-roadmap.md).
+Phase 0 environment → **1** desktop product foundation (Electron) → **2**
+workspaces/identity/authz → **3** Nexconn real-time → **4** conversation→tasks/Kanban →
+**5** Decision Vault/Team Pulse → **6** AI layer. Each phase is gated: it ends with a
+completion report and waits for explicit authorization to continue. See
+[`docs/development/phase-roadmap.md`](docs/development/phase-roadmap.md).
 
 ## License
 

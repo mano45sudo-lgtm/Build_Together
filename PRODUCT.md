@@ -4,15 +4,17 @@
 
 ## Platform
 
-web
+desktop (Electron; desktop-first with a React renderer)
 
 ## Stack
 
-React + Vite + TypeScript + Tailwind CSS + Motion (`motion`) + Lucide (frontend,
-`apps/web`); Node.js + Express + TypeScript (backend, `apps/api`); PostgreSQL + Prisma;
+Electron (main/preload/renderer) + React + Vite + TypeScript + Tailwind CSS + Motion
+(`motion`) + Lucide (renderer, `apps/desktop`); Node.js + Express + TypeScript (backend,
+`apps/api`); PostgreSQL + Prisma;
 Nexconn Chat SDK for real-time messaging; provider-independent server-side AI abstraction
 (later phase). pnpm monorepo, ESLint/Prettier, Vitest + Playwright. See
-`docs/decisions/ADR-0001-technology-stack.md`.
+`docs/decisions/ADR-0001-technology-stack.md` and
+`docs/decisions/ADR-0002-desktop-framework.md`.
 
 ## Users
 

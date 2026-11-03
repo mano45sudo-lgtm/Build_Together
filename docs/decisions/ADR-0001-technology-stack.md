@@ -1,6 +1,6 @@
 # ADR-0001 — Technology Stack
 
-- **Status:** Accepted (Phase 0)
+- **Status:** Accepted (Phase 0) · Amended (Phase 1 — added Electron desktop runtime; see ADR-0002)
 - **Date:** 2026-11-03
 - **Deciders:** Product brief + Principal Architect (this phase)
 
@@ -14,20 +14,21 @@ installed in Phase 0 (stable releases only).
 
 ## Decision
 
-| Layer                      | Choice                                       | Phase 0 pinned version                         |
-| -------------------------- | -------------------------------------------- | ---------------------------------------------- |
-| Frontend framework         | React + TypeScript on Vite                   | react 19.3.1, typescript 6.0.3, vite 8.3.5     |
-| Styling                    | Tailwind CSS (v4, CSS-first config)          | tailwindcss 4.3.4, @tailwindcss/vite 4.3.4     |
-| Animation                  | Motion for React                             | motion 14.9.0                                  |
-| Icons                      | Lucide                                       | lucide-react 1.67.0                            |
-| Backend                    | Node.js + Express + TypeScript               | express 5.3.0, tsx 4.23.15                     |
-| Database                   | PostgreSQL + Prisma                          | prisma / @prisma/client **7.10.1 (stable)**    |
-| Real-time                  | Nexconn Chat SDK (managed messaging)         | integrated in a later phase, per official docs |
-| AI                         | provider-independent server-side abstraction | later phase                                    |
-| Package manager / repo     | pnpm workspaces (monorepo)                   | pnpm 11.8.0                                    |
-| Lint / format              | ESLint (flat config) + Prettier              | eslint 10.14.0, prettier 3.9.10                |
-| Unit/integration/component | Vitest                                       | vitest 5.1.0                                   |
-| Browser E2E                | Playwright                                   | @playwright/test 1.64.1                        |
+| Layer                      | Choice                                                                        | Phase 0 pinned version                                                         |
+| -------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Frontend framework         | React + TypeScript on Vite                                                    | react 19.3.1, typescript 6.0.3, vite 8.3.5                                     |
+| Desktop runtime            | **Electron** (desktop-first; see [ADR-0002](./ADR-0002-desktop-framework.md)) | electron 45.2.1, electron-vite 6.0.0, electron-builder 26.18.0 (added Phase 1) |
+| Styling                    | Tailwind CSS (v4, CSS-first config)                                           | tailwindcss 4.3.4, @tailwindcss/vite 4.3.4                                     |
+| Animation                  | Motion for React                                                              | motion 14.9.0                                                                  |
+| Icons                      | Lucide                                                                        | lucide-react 1.67.0                                                            |
+| Backend                    | Node.js + Express + TypeScript                                                | express 5.3.0, tsx 4.23.15                                                     |
+| Database                   | PostgreSQL + Prisma                                                           | prisma / @prisma/client **7.10.1 (stable)**                                    |
+| Real-time                  | Nexconn Chat SDK (managed messaging)                                          | integrated in a later phase, per official docs                                 |
+| AI                         | provider-independent server-side abstraction                                  | later phase                                                                    |
+| Package manager / repo     | pnpm workspaces (monorepo)                                                    | pnpm 11.8.0                                                                    |
+| Lint / format              | ESLint (flat config) + Prettier                                               | eslint 10.14.0, prettier 3.9.10                                                |
+| Unit/integration/component | Vitest                                                                        | vitest 5.1.0                                                                   |
+| Browser E2E                | Playwright                                                                    | @playwright/test 1.64.1                                                        |
 
 ## Rationale / trade-offs
 
@@ -46,6 +47,23 @@ installed in Phase 0 (stable releases only).
   disk-efficient installs.
 - **Stable-only versions** — brief forbids deprecated/pre-release packages: `prisma@latest`
   was an `8.0.0-rc`, so we pinned the stable `7.10.1` line instead.
+
+## Compatibility adjustments found during Phase 1 (desktop)
+
+Each verified by running the toolchain, not assumed:
+
+1. **`electron-vite@6` requires the entry under `build.lib.entry`, not a top-level
+   `main.entry`.** The v6 config schema rejected the top-level field ("An entry point is
+   required"); main/preload entries were moved to `build.lib.entry`.
+2. **`apps/desktop/package.json` has no `"type": "module"`.** A sandboxed preload must be
+   CommonJS, so main/preload emit CJS; the renderer is a separate static ESM build.
+3. **`externalizeDepsPlugin({ exclude: ['@buildtogether/shared'] })`** — the source-only
+   workspace package must be **bundled** into main/preload (Node cannot import raw `.ts` at
+   runtime), otherwise a packaged launch throws `ERR_MODULE_NOT_FOUND`.
+4. **`electron-vite@6` peer `vite ^6 ‖ ^7 ‖ ^8`** is compatible with our existing Vite 8.3.5 —
+   confirmed by a passing main/preload/renderer build; no Vite downgrade was needed.
+5. The Electron binary is fetched post-install; if absent run
+   `node node_modules/electron/install.js`.
 
 ## Compatibility adjustments found during Phase 0 validation
 

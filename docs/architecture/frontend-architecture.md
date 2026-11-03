@@ -1,24 +1,35 @@
-# Frontend Architecture (`apps/web`)
+# Frontend Architecture (`apps/desktop/src` — Electron renderer)
 
-React + Vite + TypeScript + Tailwind CSS + Motion + Lucide. Governed by the
-`frontend-engineering` skill for code architecture and by **Impeccable** + `DESIGN.md`
-for visual design.
+The UI is the **renderer** process of the desktop app (`apps/desktop`), not a standalone
+web app (`apps/web` was retired in Phase 1 — see `desktop-architecture.md`). React + Vite +
+TypeScript + Tailwind CSS + Motion + Lucide. Governed by the `frontend-engineering` skill
+for code architecture and by **Impeccable** + `DESIGN.md` for visual design.
 
 ## Structure
 
 ```
-apps/web/src/
+apps/desktop/src/
   main.tsx           # mount
-  App.tsx            # providers + shell
-  router.tsx         # route tree (route-level code splitting)
-  components/ui/     # design-system primitives (Button, Input, Badge, Dialog, ...)
-  features/<domain>/ # messaging, tasks, kanban, workspaces, decisions, pulse
-    components/ hooks/ api/ types/
-  layouts/           # app shell, three-pane workspace layout
+  App.tsx            # providers + shell (active-section state)
+  layouts/AppShell.tsx  # sidebar · header · main content region
+  components/ui/     # design-system primitives (Button, IconButton, Input, Tooltip,
+                     #   Avatar, Separator, Dialog, Dropdown, NavItem, EmptyState)
+  components/        # Sidebar, ApiStatusIndicator
+  features/<domain>/ # (reserved) messaging, tasks, kanban, workspaces, decisions, pulse
   hooks/             # cross-cutting hooks
-  lib/               # apiClient (envelope unwrap), env, utils, nexconnClient wrapper
-  styles/            # tailwind entry + @theme tokens (added when UI begins)
+  lib/               # config (reads window.bt), apiClient (envelope unwrap), nav, cn
+  styles/index.css   # Tailwind v4 @theme design tokens + elevation utilities
+  types/global.d.ts  # declares Window.bt (the typed preload bridge)
+  test/              # Vitest + Testing Library
 ```
+
+## Desktop boundary
+
+- The renderer never touches Node or `ipcRenderer` directly. It reaches the main process
+  only through the typed `window.bt` bridge (`DesktopBridge` in `@buildtogether/shared`).
+- API base URL comes from `window.bt.getConfig()` inside Electron, falling back to
+  `import.meta.env.VITE_API_BASE_URL` when run outside the shell (tests / browser preview) —
+  never a hardcoded localhost production URL.
 
 ## Principles
 
@@ -45,5 +56,7 @@ apps/web/src/
 
 ## Not yet built
 
-Phase 0 provides only the compiling scaffold (entry point, config, placeholder page). Feature
-components arrive in later phases and are designed with Impeccable before implementation.
+Phase 1 delivers the desktop shell only: navigation targets, workspace switcher, global
+search and quick-create are honest placeholders with no fake data. Feature components,
+real-time messaging (`nexconnClient`) and routing arrive in later phases and are designed
+with Impeccable before implementation.

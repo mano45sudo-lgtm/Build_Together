@@ -48,6 +48,13 @@ prisma/          # schema.prisma + migrations (added in the DB phase)
 
 ## Integration seams
 
+- **Desktop client:** the `apps/desktop` **renderer** (the untrusted Electron web UI) calls
+  this API over HTTPS. It resolves the base URL from the trusted main process
+  (`window.bt.getConfig()`) — environment-aware, never a hardcoded localhost production URL —
+  and receives only the standard `{ data, error, meta }` envelope. The API must treat the
+  renderer like any browser client: authenticate/authorize server-side, never trust a
+  client-supplied workspace id, and set CORS to the desktop origin allow-list. The desktop
+  main process holds no product secrets; credentials stay here.
 - **Nexconn:** backend performs privileged operations and mints short-lived, user-scoped
   tokens for the client SDK (see `nexconn-integration.md`). No App Secret leaves the server.
 - **AI:** behind a provider-independent service interface in `services/ai`; provider keys
@@ -55,5 +62,7 @@ prisma/          # schema.prisma + migrations (added in the DB phase)
 
 ## Not yet built
 
-Phase 0 provides a compiling Express skeleton (`app.ts` + `index.ts` with a health route)
-and configuration only — no product endpoints. Feature endpoints arrive in later phases.
+The API remains a compiling Express skeleton (`app.ts` + `index.ts` with a **health route**
+only) and configuration. Phase 1 kept the health endpoint working and added an environment-
+aware API base for the desktop renderer — **no** product endpoints, auth, workspace, or
+messaging were introduced. Feature endpoints arrive in later phases.

@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+/*
+ * BuildTogether design token foundation (premium-dark Builder Workspace).
+ * These are the single source of truth for the desktop renderer. Impeccable remains the
+ * design authority; this codifies Section 9 of the Phase 1 brief: background/surface/border/
+ * text colors, a typography scale, spacing/radius scales, elevation, motion, and status colors.
+ * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*, rounded-*)
+ * are generated directly from them.
+ */
+@theme {
+  /* ---- Backgrounds & surfaces ---- */
+  --color-canvas: #0b0d10; /* app background */
+  --color-surface-1: #121519; /* panels, sidebar */
+  --color-surface-2: #191d23; /* cards, inputs */
+  --color-surface-3: #20262e; /* hovered / elevated */
+
+  /* ---- Borders ---- */
+  --color-border-subtle: #232830;
+  --color-border-default: #2b323c;
+  --color-border-strong: #3a4150;
+
+  /* ---- Text ---- */
+  --color-primary: #e7eaf0;
+  --color-secondary: #9aa3b2;
+  --color-muted: #6b7383;
+
+  /* ---- Accent (brand) ---- */
+  --color-accent: #4c8dff;
+  --color-accent-hover: #3d7bf0;
+  --color-accent-foreground: #0b0d10;
+
+  /* ---- Status ---- */
+  --color-success: #3ecf8e;
+  --color-warning: #f5a623;
+  --color-danger: #f2555a;
+  --color-info: #4c8dff;
+
+  /* ---- Typography ---- */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-display: 1.75rem; /* 28px */
+  --text-display--line-height: 2.25rem;
+  --text-display--letter-spacing: -0.01em;
+  --text-display--font-weight: 600;
+
+  /* ---- Radius scale ---- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* ---- Motion ---- */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+}
+
+/* ---- Elevation ---- */
+@utility elevation-1 {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.32),
+    0 0 0 1px var(--color-border-subtle);
+}
+
+@utility elevation-2 {
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.4),
+    0 0 0 1px var(--color-border-default);
+}
+
+@utility elevation-3 {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--color-border-default);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Keyboard-first, visible focus that matches the accent without harsh outlines. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 32%, transparent);
+}
+
+/* Restrained, premium scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-default) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-default);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

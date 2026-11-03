@@ -12,12 +12,12 @@ document records the integration contract and boundaries. Governed by the
 
 ## Ownership boundary
 
-| Responsibility                                                           | Owner                   |
-| ------------------------------------------------------------------------ | ----------------------- |
-| Real-time transport, message storage & delivery, presence, read receipts | **Nexconn**             |
-| Chat UI wiring, event subscription, optimistic rendering                 | `apps/web` (via SDK)    |
-| Identity mapping, token minting, privileged ops, webhooks                | `apps/api`              |
-| Task/decision/channel associations, project metadata                     | `apps/api` → PostgreSQL |
+| Responsibility                                                           | Owner                             |
+| ------------------------------------------------------------------------ | --------------------------------- |
+| Real-time transport, message storage & delivery, presence, read receipts | **Nexconn**                       |
+| Chat UI wiring, event subscription, optimistic rendering                 | `apps/desktop` renderer (via SDK) |
+| Identity mapping, token minting, privileged ops, webhooks                | `apps/api`                        |
+| Task/decision/channel associations, project metadata                     | `apps/api` → PostgreSQL           |
 
 BuildTogether **never** rebuilds or mirrors Nexconn's messaging infrastructure in Postgres.
 
@@ -28,7 +28,8 @@ BuildTogether **never** rebuilds or mirrors Nexconn's messaging infrastructure i
 2. apps/api ensures a Nexconn identity for that user (server credentials, App Secret).
 3. apps/api mints a short-lived, user-scoped Nexconn auth token.
 4. apps/api returns { token, expiresIn, identity } to the client.
-5. apps/web initializes the Nexconn SDK with the token and connects/subscribes.
+5. The `apps/desktop` renderer initializes the Nexconn SDK with the token and
+   connects/subscribes.
 6. On token expiry, client requests a fresh token from apps/api (never holds the App Secret).
 ```
 

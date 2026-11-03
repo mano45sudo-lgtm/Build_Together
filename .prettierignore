@@ -3,6 +3,9 @@ dist
 build
 coverage
 .vite
+out
+dist-electron
+release
 pnpm-lock.yaml
 *.tsbuildinfo
 .claude

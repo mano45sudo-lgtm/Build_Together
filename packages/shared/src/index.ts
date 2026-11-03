@@ -54,3 +54,6 @@ export interface HealthReport {
   service: string;
   uptimeSeconds: number;
 }
+
+// ---- Desktop (Electron) contracts ----
+export * from './desktop';

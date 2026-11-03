@@ -6,11 +6,12 @@
 
 ## 1. Product overview
 
-**BuildTogether** — _From Conversation to Completion._ A chat-first team collaboration
-platform where conversations become actionable work: messaging, project channels,
-task creation from messages, Kanban, a Decision Vault, Team Pulse, and AI-assisted
-summaries. It unifies messaging + project management + decisions that are usually
-scattered across separate tools. Real-time chat is powered by the **Nexconn Chat SDK**.
+**BuildTogether** — _From Conversation to Completion._ A **desktop-first** team
+collaboration product (a "Builder Workspace", built on Electron) where conversations become
+actionable work: messaging, project channels, task creation from messages, Kanban, a
+Decision Vault, Team Pulse, and AI-assisted summaries. It unifies messaging + project
+management + decisions that are usually scattered across separate tools. Real-time chat is
+powered by the **Nexconn Chat SDK** (integrated in a later phase).
 
 ## 2. Product philosophy
 
@@ -23,8 +24,9 @@ scattered across separate tools. Real-time chat is powered by the **Nexconn Chat
 
 ## 3. Technology stack
 
-- **Frontend** (`apps/web`): React, Vite, TypeScript, Tailwind CSS, Motion (`motion`),
-  Lucide icons.
+- **Desktop** (`apps/desktop`): **Electron** (main + sandboxed preload) with a React,
+  Vite, TypeScript, Tailwind CSS, Motion (`motion`), Lucide **renderer**. Desktop-first;
+  the renderer is untrusted and reaches the OS only via the typed `window.bt` IPC bridge.
 - **Backend** (`apps/api`): Node.js, Express, TypeScript.
 - **Database**: PostgreSQL + Prisma ORM, version-controlled migrations.
 - **Real-time**: Nexconn Chat SDK (Nexconn-managed messaging infrastructure).
@@ -41,7 +43,8 @@ stated need.
 ```
 BuildTogether/
 ├── apps/
-│   ├── web/            # React/Vite frontend (@buildtogether/web)
+│   ├── desktop/        # Electron client: electron/main + electron/preload + React src
+│   │                   #   (@buildtogether/desktop; the renderer replaces the old apps/web)
 │   └── api/            # Express backend + Prisma (@buildtogether/api)
 ├── packages/
 │   └── shared/         # shared TS types & API contracts (@buildtogether/shared)
@@ -58,9 +61,11 @@ BuildTogether/
 └── package.json
 ```
 
-Data flows: `web` → typed `apiClient` → `api` (route→middleware→controller→service→
-repository→Prisma). Real-time events flow Nexconn SDK → `web`. `shared` holds the request/
-response contracts both sides compile against.
+Data flows: the `desktop` **renderer** → typed `apiClient` → `api`
+(route→middleware→controller→service→repository→Prisma); it resolves the environment-aware
+API base from the trusted **main** process over the `window.bt` bridge (never a hardcoded
+localhost prod URL). Real-time events flow Nexconn SDK → renderer. `shared` holds the
+request/response **and desktop IPC** contracts (`desktop.ts`) both sides compile against.
 
 ## 5. Coding standards & naming
 
@@ -131,9 +136,10 @@ project-specific, not generic filler.
 
 ```bash
 pnpm install                 # install all workspace deps (run at repo root)
-pnpm dev                     # web + api dev servers (see root package.json)
-pnpm --filter @buildtogether/web dev
-pnpm --filter @buildtogether/api dev
+pnpm --filter @buildtogether/api dev   # API on :4000
+pnpm desktop:dev             # Electron + renderer (HMR on :5173)
+pnpm desktop:build           # compile main/preload/renderer to apps/desktop/out
+pnpm desktop:package         # electron-builder (configured; not run in Phase 1)
 pnpm lint                    # ESLint across workspace
 pnpm format                  # Prettier write
 pnpm typecheck               # tsc --noEmit across workspace

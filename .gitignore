@@ -8,6 +8,10 @@ build/
 *.tsbuildinfo
 .vite/
 coverage/
+# Electron (electron-vite / electron-builder)
+out/
+dist-electron/
+release/
 
 # Local environment files & secrets (never commit real credentials)
 .env
