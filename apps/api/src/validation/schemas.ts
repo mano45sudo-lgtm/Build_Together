@@ -127,3 +127,91 @@ export const addConversationMembersSchema = z.object({
     .min(1, 'Provide at least one user to add')
     .max(100, 'Too many members'),
 });
+
+// ---- Phase 4 projects (workspace-scoped) ----
+// Shape only. The project SERVICE enforces the semantic + authorization rules (owner must be a
+// workspace member, the project must belong to the path workspace, PRIVATE visibility, member-vs-admin
+// mutation rights), so none of those can be bypassed at the validation edge.
+
+/** Accept either a plain calendar date (`YYYY-MM-DD`, what a date input yields) or a full ISO instant. */
+const isoDateString = z.union([
+  z.string().date('Must be a YYYY-MM-DD date'),
+  z.string().datetime({ offset: true, error: 'Must be a valid ISO date-time' }),
+]);
+
+const projectStatusSchema = z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED'], {
+  error: 'Status must be PLANNING, ACTIVE, ON_HOLD or COMPLETED',
+});
+
+const projectVisibilitySchema = z.enum(['WORKSPACE', 'PRIVATE'], {
+  error: 'Visibility must be WORKSPACE or PRIVATE',
+});
+
+// A SUGGESTED key (the client may propose one; the server still validates + de-duplicates it).
+const projectKeySchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{1,11}$/, 'Project key must be 2-12 letters, digits, - or _');
+
+const nullableShortText = (max: number, label: string) =>
+  z.string().trim().max(max, `${label} must be at most ${max} characters`).nullable();
+
+export const createProjectSchema = z.object({
+  name: trimmed(1, 80, 'Project name'),
+  description: z.string().trim().max(500, 'Description must be at most 500 characters').optional(),
+  status: projectStatusSchema.optional(),
+  visibility: projectVisibilitySchema.optional(),
+  ownerId: z.string().trim().min(1, 'Owner is required').max(64).optional(),
+  projectKey: projectKeySchema.optional(),
+  startDate: z.union([isoDateString, z.null()]).optional(),
+  targetDate: z.union([isoDateString, z.null()]).optional(),
+  icon: nullableShortText(16, 'Icon').optional(),
+  color: nullableShortText(24, 'Color').optional(),
+});
+
+export const updateProjectSchema = z
+  .object({
+    name: trimmed(1, 80, 'Project name').optional(),
+    description: z
+      .string()
+      .trim()
+      .max(500, 'Description must be at most 500 characters')
+      .nullable()
+      .optional(),
+    status: projectStatusSchema.optional(),
+    visibility: projectVisibilitySchema.optional(),
+    ownerId: z.string().trim().min(1, 'Owner is required').max(64).optional(),
+    startDate: z.union([isoDateString, z.null()]).optional(),
+    targetDate: z.union([isoDateString, z.null()]).optional(),
+    icon: nullableShortText(16, 'Icon').optional(),
+    color: nullableShortText(24, 'Color').optional(),
+  })
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.description !== undefined ||
+      v.status !== undefined ||
+      v.visibility !== undefined ||
+      v.ownerId !== undefined ||
+      v.startDate !== undefined ||
+      v.targetDate !== undefined ||
+      v.icon !== undefined ||
+      v.color !== undefined,
+    { message: 'Provide at least one field to update' },
+  );
+
+/** Query-string schema for the project list (search / filter / sort / cursor pagination). */
+export const projectListQuerySchema = z.object({
+  scope: z.enum(['active', 'archived', 'all']).optional(),
+  status: projectStatusSchema.optional(),
+  search: z.string().trim().max(120, 'Search is too long').optional(),
+  sort: z.enum(['createdAt', 'updatedAt', 'name']).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
+  limit: z.coerce
+    .number()
+    .int('Limit must be an integer')
+    .min(1, 'Limit must be positive')
+    .max(100, 'Limit is too large')
+    .optional(),
+  cursor: z.string().trim().max(512, 'Invalid cursor').optional(),
+});

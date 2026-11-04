@@ -111,3 +111,33 @@ separate; see below).
 
 Nothing untested is implied as covered; the phase report states actual counts and names what
 was not run.
+
+## Phase 4 state (projects — implemented, verified)
+
+**99 backend** (7 files) + **21 desktop** (3 files) tests pass — Phase 2/3 remain green, now subsumed in
+the totals; projects add **21** backend integration tests (`projects.test.ts`) and **1** desktop smoke
+(`App.test.tsx`). All project tests hit the **real** API + PostgreSQL (no provider involved).
+
+- **Backend — CRUD + validation:** create (owner defaults to creator; `projectKey`/`slug` generated and
+  matching `^[A-Z0-9_-]{2,12}$`; a suggested-key collision dedups `ALPHA`→`ALPHA-2`); empty name →
+  `400 VALIDATION_FAILED`; invalid date → `400 INVALID_DATE`; empty patch → `400`; get + overview
+  return the envelope; update re-reads rights per mutation.
+- **Backend — authorization & isolation (the security boundary):** a MEMBER cannot assign a foreign owner
+  (`403 INSUFFICIENT_ROLE`) while an ADMIN can; a non-member owner target → `400 OWNER_NOT_MEMBER`;
+  managing a project you don’t own → `403`; a **PRIVATE** project is invisible to a co-member (`404` on
+  read and excluded from the list) yet visible to its owner/creator and ADMIN; a non-member reaching the
+  collection → `403 NOT_A_MEMBER`; unauthenticated → `401`; a **cross-workspace `projectId` → 404**
+  (`PROJECT_NOT_FOUND`, non-enumerable).
+- **Backend — list semantics:** scope (`active`/`archived`), `status` filter, case-insensitive `search`
+  over name + key, sort + direction, and **keyset cursor pagination** followed through `meta.cursor`;
+  archive/restore are idempotent via `archivedAt`.
+- **Desktop renderer (`App.test.tsx`, jsdom):** with `window.bt` mocked, the Projects nav opens the list
+  and renders a server-authorized project (“Website Relaunch” / `WEB`) — no fabricated data.
+- **Not covered (honestly):** the project **Conversations** tab is an honest bridge to Messages — there is
+  no project-scoped Nexconn capability, so no project-channel test exists (nothing is faked/claimed);
+  IPC argument-boundary validation (`reqId`/`buildCreateProject`/`buildProjectListQuery` in main) is
+  enforced by the trusted main process and covered by `tsc` + the electron-vite build, not jsdom.
+
+All quality gates were re-run in-session and are green: typecheck, lint (0), format:check, test (99+21),
+build (api→dist; desktop main/preload/renderer), `prisma migrate status` (3 migrations, up to date), plus
+a live HTTP check (health `ok`; projects route `401` unauthenticated; real create→list→overview→archive).

@@ -64,3 +64,13 @@ documented upload API.
 No Nexconn code is integrated in Phase 0. This document, plus the `nexconn-integration`
 skill, defines the boundary so the integration phase starts from an agreed contract and an
 explicit list of documentation to consult.
+
+## Phase 4 state (projects — integration boundary unchanged)
+
+Phase 4 shipped the **Projects foundation** but **no new Nexconn surface**: there is no
+`project/channel ↔ Nexconn channel/group id` link yet, because Phase 3 integrated only workspace
+**GROUP** and **DIRECT** conversations. Rather than invent a project-channel SDK method (§10/§11), the
+desktop project **Conversations** tab is an honest bridge to workspace Messages. Binding a project to a
+real Nexconn channel remains deferred to a later, authorized phase once the docs confirm the capability;
+throughout, the App Secret stays server-side and only a short-lived, user-scoped token reaches the
+client.

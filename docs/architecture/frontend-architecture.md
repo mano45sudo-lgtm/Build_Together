@@ -54,9 +54,21 @@ apps/desktop/src/
 - Accessibility is a floor: semantic HTML, keyboard operation, visible focus, meaningful
   labels (WCAG 2.1 AA target).
 
+## Built so far (renderer)
+
+Phase 2 delivered the authenticated Operate surfaces (welcome/sign-in/sign-up, first-workspace
+onboarding, workspace switcher, team management, settings, profile & security, invitation
+acceptance); Phase 3 added the **Messages** surface (workspace two-pane conversations over the mocked
+in tests / real Nexconn Web IMLib at runtime); **Phase 4** added the **Projects** surface —
+`features/projects/*` (ProjectsScreen list with All/Active/Archived + debounced search,
+CreateProjectDialog, ProjectWorkspace with Overview · Conversations · Settings, ProjectSettingsPanel)
+reached through the typed `window.bt.projects` bridge and driven by `lib/data.ts`; `lib/rbac.ts`
+(`canManageProject`/`canAssignProjectOwner`) only mirrors server authority for visibility. All states
+are honest (loading/empty/no-results/error) with **no fabricated data**.
+
 ## Not yet built
 
-Phase 1 delivers the desktop shell only: navigation targets, workspace switcher, global
-search and quick-create are honest placeholders with no fake data. Feature components,
-real-time messaging (`nexconnClient`) and routing arrive in later phases and are designed
-with Impeccable before implementation.
+Global search and quick-create remain honest placeholders. Tasks, the Kanban board,
+conversation→task, the Decision Vault, Team Pulse and AI surfaces arrive in later phases and are
+designed with Impeccable before implementation. The project **Conversations** tab is currently an
+honest bridge to workspace Messages (no project-scoped Nexconn channel capability exists yet).

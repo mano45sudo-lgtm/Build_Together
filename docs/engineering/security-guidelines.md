@@ -114,3 +114,28 @@ for anti-enumeration. Desktop session ownership and `safeStorage` handling are a
 (ADR-0003); invitation email uses a clearly-labelled dev transport until a real provider is
 configured; production email/SMTP config is required before invitations are genuinely
 deliverable.
+
+## Phase 4 state (projects — implemented)
+
+Projects add a resource layer **inside** the existing workspace boundary — they do not weaken it.
+
+- **Authorization is server-derived, never client-asserted.** The projects router is mounted after
+  `authenticate` + `requireWorkspaceRole('MEMBER')` with `mergeParams`, so a caller can only ever reach
+  projects of a workspace they are verified to belong to; a **cross-workspace `projectId` returns 404**
+  (no IDOR, no existence leak). The renderer’s `lib/rbac.ts` only hides controls — it is **never** the
+  security boundary.
+- **Project permission matrix enforced in the service:** workspace OWNER/ADMIN manage every project; a
+  MEMBER views workspace-visible projects, creates, and manages (update/archive/restore/change-owner)
+  **only the projects they own or created** — every mutation re-derives rights from the DB.
+  Assigning/reassigning a project owner to another user is an OWNER/ADMIN action and the target must be
+  a **current workspace member** (else `OWNER_NOT_MEMBER`); a project always retains exactly one owner.
+- **Visibility boundary:** a `PRIVATE` project is readable only by its owner/creator and workspace
+  OWNER/ADMIN; a non-entitled read (and list exclusion) returns **404**, so private-project existence is
+  not disclosed across the visibility boundary.
+- **Input & integrity:** Zod validates body (`validate`) and query (`validateQuery`); `projectKey`/`slug`
+  are generated and uniquified **per workspace** with a DB unique-constraint backstop (race → 409); all
+  ids interpolated into SQL-free Prisma queries; `ownerId`/`createdById` are `Restrict` FKs so audit
+  pointers can’t dangle. IPC inputs for projects are sender- and argument-validated (`reqId` shapes the
+  path ids; query/payload allowlisted in main), and **no token or secret crosses into the renderer**.
+
+No new secrets or external surface were introduced; the Nexconn App Secret remains server-side only.

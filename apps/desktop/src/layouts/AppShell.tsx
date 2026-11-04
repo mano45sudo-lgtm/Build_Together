@@ -1,17 +1,8 @@
 import type { ReactNode } from 'react';
-import {
-  LogOut,
-  Plus,
-  Search,
-  Settings as SettingsIcon,
-  User,
-  type LucideIcon,
-} from 'lucide-react';
+import { Plus, Search, type LucideIcon } from 'lucide-react';
 import { Sidebar } from '../components/Sidebar';
 import { ApiStatusIndicator } from '../components/ApiStatusIndicator';
-import { Avatar } from '../components/ui/Avatar';
 import { Button, IconButton } from '../components/ui/Button';
-import { Dropdown } from '../components/ui/Dropdown';
 import type { NavId } from '../lib/nav';
 
 export interface AppShellProps {
@@ -29,7 +20,7 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/** The persistent desktop frame: navigation rail, header (search / create / status / account). */
+/** The persistent desktop frame: navigation rail (with account), and a minimal context header. */
 export function AppShell({
   activeId,
   sectionLabel,
@@ -45,12 +36,18 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-canvas text-primary">
-      <Sidebar activeId={activeId} onSelectNav={onSelectNav} />
+      <Sidebar
+        activeId={activeId}
+        accountName={accountName}
+        onSelectNav={onSelectNav}
+        onOpenSettings={onOpenSettings}
+        onSignOut={onSignOut}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-surface-1 px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-canvas px-4">
           <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-primary">
-            <SectionIcon className="size-4 shrink-0 text-accent" aria-hidden="true" />
+            <SectionIcon className="size-4 shrink-0 text-muted" aria-hidden="true" />
             <span className="truncate">{sectionLabel}</span>
           </div>
 
@@ -68,26 +65,6 @@ export function AppShell({
             </IconButton>
 
             <ApiStatusIndicator />
-
-            <Dropdown
-              triggerLabel="Account menu"
-              trigger={<Avatar name={accountName} size="sm" />}
-              items={[
-                {
-                  id: 'profile',
-                  label: 'Profile & settings',
-                  icon: User,
-                  onSelect: onOpenSettings,
-                },
-                {
-                  id: 'settings',
-                  label: 'Workspace settings',
-                  icon: SettingsIcon,
-                  onSelect: onOpenSettings,
-                },
-                { id: 'sign-out', label: 'Sign out', icon: LogOut, onSelect: onSignOut },
-              ]}
-            />
           </div>
         </header>
 

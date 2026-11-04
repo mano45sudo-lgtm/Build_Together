@@ -12,14 +12,14 @@ entities.
 
 ## Entity domains (built phase by phase)
 
-| Domain    | Models (indicative)                                                              | Notes                                                                         |
-| --------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Identity  | `User`, `Session` **_(built, Phase 2)_**                                         | Auth; hashed credentials + hashed opaque sessions only.                       |
-| Workspace | `Workspace`, `WorkspaceMembership`, `WorkspaceInvitation` **_(built, Phase 2)_** | Root of isolation; every scoped row carries `workspaceId`.                    |
-| Projects  | `Project`, `ChannelLink(projectId, nexconnChannelId)`                            | Project channels reference Nexconn, don't mirror them. (Phase 4)              |
-| Work      | `Task(workspaceId, projectId, status, assigneeId, sourceRef)`                    | `sourceRef` stores the originating Nexconn message id → provenance. (Phase 4) |
-| Decisions | `Decision(workspaceId, title, body, sourceRef, createdAt, deletedAt?)`           | Decision Vault; soft-delete where history matters. (Phase 5)                  |
-| Pulse/AI  | later (summary/action artifacts, pointers)                                       | Introduced with the AI phase.                                                 |
+| Domain    | Models (indicative)                                                                   | Notes                                                                         |
+| --------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Identity  | `User`, `Session` **_(built, Phase 2)_**                                              | Auth; hashed credentials + hashed opaque sessions only.                       |
+| Workspace | `Workspace`, `WorkspaceMembership`, `WorkspaceInvitation` **_(built, Phase 2)_**      | Root of isolation; every scoped row carries `workspaceId`.                    |
+| Projects  | `Project` **_(built, Phase 4)_**; `ChannelLink(projectId, nexconnChannelId)` (future) | Project channels would reference Nexconn, not mirror it — **not yet built**.  |
+| Work      | `Task(workspaceId, projectId, status, assigneeId, sourceRef)`                         | `sourceRef` stores the originating Nexconn message id → provenance. (Phase 5) |
+| Decisions | `Decision(workspaceId, title, body, sourceRef, createdAt, deletedAt?)`                | Decision Vault; soft-delete where history matters. (Phase 5)                  |
+| Pulse/AI  | later (summary/action artifacts, pointers)                                            | Introduced with the AI phase.                                                 |
 
 Fields for a domain are defined only when its phase is authorized — never created ahead.
 
@@ -77,4 +77,25 @@ Models and invariants:
   single-use, expiring tokens.
 
 Referential integrity, `cuid()` ids, `@updatedAt`, and leading `(workspaceId, …)` compound
-indexes follow the design rules above. Projects/Work/Decisions remain unbuilt (Phase 4+).
+indexes follow the design rules above. Work/Decisions remain unbuilt (Phase 5+).
+
+## Phase 4 state (projects — built)
+
+Committed as migration `20261104055810_add_projects` (**additive, non-destructive** — `CREATE` only,
+no `DROP`; Phase 2/3 data preserved; applied against Docker PG `bt-postgres`).
+
+- **`Project`** — `workspaceId` FK (isolation root; `onDelete: Cascade`), `name`, `description?`,
+  `projectKey`, `slug`, `status` enum (`PLANNING`/`ACTIVE`/`ON_HOLD`/`COMPLETED`), `visibility` enum
+  (`WORKSPACE`/`PRIVATE`), `ownerId` + `createdById` FKs (`onDelete: Restrict` — a project always
+  points at a real member; ownership is reassigned, never left dangling), optional `startDate`/
+  `targetDate`/`icon`/`color`, plus `createdAt`/`@updatedAt` and `archivedAt?`.
+- **Uniqueness is scoped to the workspace, not global:** `@@unique([workspaceId, projectKey])` and
+  `@@unique([workspaceId, slug])` — two workspaces may reuse a key; within one it is unique. Compound
+  `(workspaceId, …)` indexes back the hot list queries; `@@index([workspaceId, archivedAt])` serves the
+  All/Active/Archived scopes.
+- **Archive is a marker, not a status** — `archivedAt` (a timestamp) is the **sole** archive signal,
+  deliberately kept **out** of the `status` enum so archiving never overwrites a real workflow status
+  and restore returns the prior status untouched.
+- **No project-membership table** — this phase derives project access from `WorkspaceMembership` +
+  `ownerId`/`createdById` + `visibility` (enforced server-side). Per-project membership, and any
+  `ChannelLink`/`Task`, are introduced only when their phase is authorized (never created ahead).

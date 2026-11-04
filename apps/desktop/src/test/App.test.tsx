@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
 import type { AuthSessionView, DesktopBridge, IpcOutcome } from '@buildtogether/shared';
 import { App } from '../App';
 
@@ -68,6 +69,35 @@ function installBridge() {
       accept: () => ok(session.workspaces[0]!),
       pendingForMe: () => ok([]),
     },
+    projects: {
+      list: () =>
+        ok([
+          {
+            id: 'p_1',
+            workspaceId: 'w_1',
+            name: 'Website Relaunch',
+            slug: 'website-relaunch',
+            description: 'Rebuild the marketing site',
+            projectKey: 'WEB',
+            status: 'ACTIVE',
+            visibility: 'WORKSPACE',
+            owner: { id: 'u_1', name: 'Ada Lovelace', avatarUrl: null },
+            createdById: 'u_1',
+            startDate: null,
+            targetDate: '2026-12-31T00:00:00.000Z',
+            icon: '🚀',
+            color: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            archivedAt: null,
+          },
+        ]),
+      create: () => ok(null),
+      getOverview: () => ok(null),
+      update: () => ok(null),
+      archive: () => ok(null),
+      restore: () => ok(null),
+    },
   } as unknown as DesktopBridge;
 
   Object.defineProperty(window, 'bt', { value: bridge, configurable: true, writable: true });
@@ -90,8 +120,18 @@ describe('desktop shell', () => {
     render(<App />);
     const nav = await screen.findByRole('navigation', { name: /primary/i });
     expect(nav).toBeInTheDocument();
-    expect(within(nav).getByRole('button', { name: /^team$/i })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: /^members$/i })).toBeInTheDocument();
     expect(screen.getByText(/welcome back, ada/i)).toBeInTheDocument();
     expect(screen.getAllByText('Acme Product').length).toBeGreaterThan(0);
+  });
+
+  it('opens the workspace projects list from the navigation', async () => {
+    installBridge();
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: /primary/i });
+    fireEvent.click(within(nav).getByRole('button', { name: /projects/i }));
+    // The mocked project surfaces once the async list resolves; no fake data is rendered on failure.
+    expect(await screen.findByText('Website Relaunch')).toBeInTheDocument();
+    expect(screen.getByText('WEB')).toBeInTheDocument();
   });
 });

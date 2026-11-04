@@ -2,20 +2,58 @@ import { BrowserWindow, ipcMain } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import type {
   AcceptInvitationInput,
+  AddTaskDependencyInput,
+  AssignTaskInput,
   ChangePasswordInput,
+  ChangeTaskStatusInput,
   ConversationKind,
   CreateConversationInput,
+  CreateDecisionCommentInput,
+  CreateDecisionInput,
   CreateInvitationInput,
+  CreateProjectInput,
+  CreateTaskInput,
   CreateWorkspaceInput,
+  DecisionAlternativeInput,
+  DecisionListQuery,
+  DecisionParticipantInput,
+  DecisionReferenceInput,
+  DecisionReferenceType,
+  DecisionSortField,
+  DecisionSource,
+  DecisionStatus,
   IpcError,
   IpcOutcome,
   LoginInput,
+  ProjectListQuery,
+  ProjectStatus,
+  ProjectVisibility,
   RegisterInput,
+  SupersedeDecisionInput,
+  TaskListQuery,
+  TaskPriority,
+  TaskSortField,
+  TaskStatus,
+  UpdateDecisionInput,
   UpdateProfileInput,
+  UpdateProjectInput,
+  UpdateTaskInput,
   UpdateWorkspaceInput,
   WorkspaceRole,
 } from '@buildtogether/shared';
-import { IPC, ROLE_RANK } from '@buildtogether/shared';
+import {
+  IPC,
+  DECISION_REFERENCE_TYPES,
+  DECISION_SORT_FIELDS,
+  DECISION_SOURCES,
+  DECISION_STATUSES,
+  PROJECT_STATUSES,
+  PROJECT_VISIBILITIES,
+  ROLE_RANK,
+  TASK_PRIORITIES,
+  TASK_SORT_FIELDS,
+  TASK_STATUSES,
+} from '@buildtogether/shared';
 import * as api from './api-client';
 import { ApiRequestError } from './api-client';
 import { resolveDesktopConfig, trustedRendererOrigin } from './config';
@@ -98,6 +136,331 @@ function reqRole(value: unknown): WorkspaceRole {
     throw new ApiRequestError('INVALID_ARGUMENT', 'role must be OWNER, ADMIN or MEMBER');
   }
   return value as WorkspaceRole;
+}
+
+/** A string field that may be explicitly null (dates, icon, color) — distinct from "absent". */
+function optStrOrNull(value: unknown, field: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} must be a string or null`);
+  }
+  return value;
+}
+
+/** Constrain an optional enum-ish field to a closed vocabulary at the trust boundary. */
+function optEnum<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[],
+): T | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} is not a valid value`);
+  }
+  return value as T;
+}
+
+/** Build a CreateProjectInput from a raw IPC object (name required; the rest optional/validated). */
+function buildCreateProject(o: Record<string, unknown>): CreateProjectInput {
+  const payload: CreateProjectInput = { name: reqStr(o['name'], 'name') };
+  const description = optStr(o['description'], 'description');
+  if (description !== undefined) payload.description = description;
+  const status = optEnum<ProjectStatus>(o['status'], 'status', PROJECT_STATUSES);
+  if (status !== undefined) payload.status = status;
+  const visibility = optEnum<ProjectVisibility>(
+    o['visibility'],
+    'visibility',
+    PROJECT_VISIBILITIES,
+  );
+  if (visibility !== undefined) payload.visibility = visibility;
+  if (o['ownerId'] !== undefined && o['ownerId'] !== null) {
+    payload.ownerId = reqId(o['ownerId'], 'ownerId');
+  }
+  const projectKey = optStr(o['projectKey'], 'projectKey');
+  if (projectKey !== undefined) payload.projectKey = projectKey;
+  const startDate = optStrOrNull(o['startDate'], 'startDate');
+  if (startDate !== undefined) payload.startDate = startDate;
+  const targetDate = optStrOrNull(o['targetDate'], 'targetDate');
+  if (targetDate !== undefined) payload.targetDate = targetDate;
+  const icon = optStrOrNull(o['icon'], 'icon');
+  if (icon !== undefined) payload.icon = icon;
+  const color = optStrOrNull(o['color'], 'color');
+  if (color !== undefined) payload.color = color;
+  return payload;
+}
+
+/** Build an UpdateProjectInput; the server rejects an empty patch, so we just carry present fields. */
+function buildUpdateProject(o: Record<string, unknown>): UpdateProjectInput {
+  const payload: UpdateProjectInput = {};
+  const name = optStr(o['name'], 'name');
+  if (name !== undefined) payload.name = name;
+  if ('description' in o)
+    payload.description = optStrOrNull(o['description'], 'description') ?? null;
+  const status = optEnum<ProjectStatus>(o['status'], 'status', PROJECT_STATUSES);
+  if (status !== undefined) payload.status = status;
+  const visibility = optEnum<ProjectVisibility>(
+    o['visibility'],
+    'visibility',
+    PROJECT_VISIBILITIES,
+  );
+  if (visibility !== undefined) payload.visibility = visibility;
+  if (o['ownerId'] !== undefined && o['ownerId'] !== null) {
+    payload.ownerId = reqId(o['ownerId'], 'ownerId');
+  }
+  if ('startDate' in o) payload.startDate = optStrOrNull(o['startDate'], 'startDate') ?? null;
+  if ('targetDate' in o) payload.targetDate = optStrOrNull(o['targetDate'], 'targetDate') ?? null;
+  if ('icon' in o) payload.icon = optStrOrNull(o['icon'], 'icon') ?? null;
+  if ('color' in o) payload.color = optStrOrNull(o['color'], 'color') ?? null;
+  return payload;
+}
+
+/** Sanitize a project list query DTO (the main process rebuilds the query string; server re-checks). */
+function buildProjectListQuery(value: unknown): ProjectListQuery {
+  if (value === undefined || value === null) return {};
+  const o = asObject(value);
+  const query: ProjectListQuery = {};
+  const scope = optEnum<'active' | 'archived' | 'all'>(o['scope'], 'scope', [
+    'active',
+    'archived',
+    'all',
+  ]);
+  if (scope !== undefined) query.scope = scope;
+  const status = optEnum<ProjectStatus>(o['status'], 'status', PROJECT_STATUSES);
+  if (status !== undefined) query.status = status;
+  const search = optStr(o['search'], 'search');
+  if (search !== undefined) query.search = search;
+  const sort = optEnum<'createdAt' | 'updatedAt' | 'name'>(o['sort'], 'sort', [
+    'createdAt',
+    'updatedAt',
+    'name',
+  ]);
+  if (sort !== undefined) query.sort = sort;
+  const dir = optEnum<'asc' | 'desc'>(o['dir'], 'dir', ['asc', 'desc']);
+  if (dir !== undefined) query.dir = dir;
+  if (typeof o['limit'] === 'number') query.limit = o['limit'];
+  const cursor = optStr(o['cursor'], 'cursor');
+  if (cursor !== undefined) query.cursor = cursor;
+  return query;
+}
+
+// ---- task input builders (Phase 5; every field validated at the trust boundary) ----
+
+/**
+ * Build a CreateTaskInput from a raw IPC object. Title is required; every optional field is coerced
+ * through a strict guard. An assignee and each dependency id must be valid identifiers (they become
+ * foreign keys the SERVER then re-validates against membership / project scope).
+ */
+function buildCreateTask(o: Record<string, unknown>): CreateTaskInput {
+  const payload: CreateTaskInput = { title: reqStr(o['title'], 'title') };
+  // A null description on CREATE simply means "none" — omit it (there is no prior value to clear).
+  const description = optStr(o['description'], 'description');
+  if (description !== undefined) payload.description = description;
+  const status = optEnum<TaskStatus>(o['status'], 'status', TASK_STATUSES);
+  if (status !== undefined) payload.status = status;
+  const priority = optEnum<TaskPriority>(o['priority'], 'priority', TASK_PRIORITIES);
+  if (priority !== undefined) payload.priority = priority;
+  if (o['assigneeId'] !== undefined) {
+    payload.assigneeId = o['assigneeId'] === null ? null : reqId(o['assigneeId'], 'assigneeId');
+  }
+  if ('startDate' in o) payload.startDate = optStrOrNull(o['startDate'], 'startDate') ?? null;
+  if ('dueDate' in o) payload.dueDate = optStrOrNull(o['dueDate'], 'dueDate') ?? null;
+  if (o['dependencyIds'] !== undefined) {
+    payload.dependencyIds = reqIdArray(o['dependencyIds'], 'dependencyIds');
+  }
+  return payload;
+}
+
+/** Build an UpdateTaskInput (content patch); carries only present fields — the server rejects empties. */
+function buildUpdateTask(o: Record<string, unknown>): UpdateTaskInput {
+  const payload: UpdateTaskInput = {};
+  const title = optStr(o['title'], 'title');
+  if (title !== undefined) payload.title = title;
+  if ('description' in o) {
+    payload.description = optStrOrNull(o['description'], 'description') ?? null;
+  }
+  const status = optEnum<TaskStatus>(o['status'], 'status', TASK_STATUSES);
+  if (status !== undefined) payload.status = status;
+  const priority = optEnum<TaskPriority>(o['priority'], 'priority', TASK_PRIORITIES);
+  if (priority !== undefined) payload.priority = priority;
+  if ('startDate' in o) payload.startDate = optStrOrNull(o['startDate'], 'startDate') ?? null;
+  if ('dueDate' in o) payload.dueDate = optStrOrNull(o['dueDate'], 'dueDate') ?? null;
+  return payload;
+}
+
+/** Sanitize a task list query DTO (main process rebuilds the query string; server re-checks). */
+function buildTaskListQuery(value: unknown): TaskListQuery {
+  if (value === undefined || value === null) return {};
+  const o = asObject(value);
+  const query: TaskListQuery = {};
+  const status = optEnum<TaskStatus>(o['status'], 'status', TASK_STATUSES);
+  if (status !== undefined) query.status = status;
+  const priority = optEnum<TaskPriority>(o['priority'], 'priority', TASK_PRIORITIES);
+  if (priority !== undefined) query.priority = priority;
+  if (typeof o['assigneeId'] === 'string' && o['assigneeId'].length > 0) {
+    query.assigneeId = reqId(o['assigneeId'], 'assigneeId');
+  }
+  if (typeof o['unassigned'] === 'boolean') query.unassigned = o['unassigned'];
+  const search = optStr(o['search'], 'search');
+  if (search !== undefined) query.search = search;
+  const sort = optEnum<TaskSortField>(o['sort'], 'sort', TASK_SORT_FIELDS);
+  if (sort !== undefined) query.sort = sort;
+  const dir = optEnum<'asc' | 'desc'>(o['dir'], 'dir', ['asc', 'desc']);
+  if (dir !== undefined) query.dir = dir;
+  if (typeof o['limit'] === 'number') query.limit = o['limit'];
+  const cursor = optStr(o['cursor'], 'cursor');
+  if (cursor !== undefined) query.cursor = cursor;
+  return query;
+}
+
+/** Sanitize an activity query (limit + opaque cursor only). */
+function buildActivityQuery(value: unknown): { limit?: number; cursor?: string } {
+  if (value === undefined || value === null) return {};
+  const o = asObject(value);
+  const query: { limit?: number; cursor?: string } = {};
+  if (typeof o['limit'] === 'number') query.limit = o['limit'];
+  const cursor = optStr(o['cursor'], 'cursor');
+  if (cursor !== undefined) query.cursor = cursor;
+  return query;
+}
+
+// ---- decision input builders (Phase 6; every field validated at the trust boundary) ----
+
+/** A non-empty array guard that keeps each item as a plain object for field-by-field validation. */
+function objArray(value: unknown, field: string): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} must be an array`);
+  }
+  return value.map((item) => asObject(item));
+}
+
+function reqBool(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} must be a boolean`);
+  }
+  return value;
+}
+
+/**
+ * Build the owned-alternatives set. REPLACE semantics are decided by the server; here we only shape
+ * and bound the payload. At most one `chosen: true` is enforced SERVER-side (a client cannot bypass it).
+ */
+function buildAlternatives(value: unknown): DecisionAlternativeInput[] {
+  return objArray(value, 'alternatives').map((o) => {
+    const item: DecisionAlternativeInput = { label: reqStr(o['label'], 'alternatives[].label') };
+    if ('description' in o) {
+      item.description = optStrOrNull(o['description'], 'alternatives[].description') ?? null;
+    }
+    if ('chosen' in o) item.chosen = reqBool(o['chosen'], 'alternatives[].chosen');
+    return item;
+  });
+}
+
+/**
+ * Build the cited-references set. `type` must come from the closed vocabulary; `url` / `entityId` are
+ * carried as-is (shape rules per type — e.g. TASK needs an id, LINK needs a URL — are server-enforced).
+ */
+function buildReferences(value: unknown): DecisionReferenceInput[] {
+  return objArray(value, 'references').map((o) => {
+    const type = optEnum<DecisionReferenceType>(
+      o['type'],
+      'references[].type',
+      DECISION_REFERENCE_TYPES,
+    );
+    if (!type) {
+      throw new ApiRequestError('INVALID_ARGUMENT', 'references[].type is required');
+    }
+    const item: DecisionReferenceInput = { type, label: reqStr(o['label'], 'references[].label') };
+    if ('url' in o) item.url = optStrOrNull(o['url'], 'references[].url') ?? null;
+    if ('entityId' in o) {
+      item.entityId = optStrOrNull(o['entityId'], 'references[].entityId') ?? null;
+      if (item.entityId !== null) item.entityId = reqId(item.entityId, 'references[].entityId');
+    }
+    return item;
+  });
+}
+
+/** Carry a context link only when it is a real id — an explicit null means "no link" on create. */
+function contextLink(o: Record<string, unknown>, key: string): string | undefined {
+  const value = o[key];
+  if (value === undefined || value === null) return undefined;
+  return reqId(value, key);
+}
+
+/** Build a CreateDecisionInput. Title is required; the server derives `source` from the context link. */
+function buildCreateDecision(o: Record<string, unknown>): CreateDecisionInput {
+  const payload: CreateDecisionInput = { title: reqStr(o['title'], 'title') };
+  for (const field of ['background', 'decision', 'rationale', 'consequences'] as const) {
+    const value = optStr(o[field], field);
+    if (value !== undefined) payload[field] = value;
+  }
+  const status = optEnum<'DRAFT' | 'IN_DISCUSSION'>(o['status'], 'status', [
+    'DRAFT',
+    'IN_DISCUSSION',
+  ]);
+  if (status !== undefined) payload.status = status;
+  const source = optEnum<'MANUAL' | 'MEETING'>(o['source'], 'source', ['MANUAL', 'MEETING']);
+  if (source !== undefined) payload.source = source;
+  const projectId = contextLink(o, 'projectId');
+  if (projectId !== undefined) payload.projectId = projectId;
+  const conversationId = contextLink(o, 'conversationId');
+  if (conversationId !== undefined) payload.conversationId = conversationId;
+  const taskId = contextLink(o, 'taskId');
+  if (taskId !== undefined) payload.taskId = taskId;
+  if (o['participantUserIds'] !== undefined) {
+    payload.participantUserIds = reqIdArray(o['participantUserIds'], 'participantUserIds');
+  }
+  if (o['alternatives'] !== undefined) payload.alternatives = buildAlternatives(o['alternatives']);
+  if (o['references'] !== undefined) payload.references = buildReferences(o['references']);
+  return payload;
+}
+
+/** Build an UpdateDecisionInput (content patch); context links are immutable here by design. */
+function buildUpdateDecision(o: Record<string, unknown>): UpdateDecisionInput {
+  const payload: UpdateDecisionInput = {};
+  const title = optStr(o['title'], 'title');
+  if (title !== undefined) payload.title = title;
+  for (const field of ['background', 'decision', 'rationale', 'consequences'] as const) {
+    if (field in o) payload[field] = optStrOrNull(o[field], field) ?? null;
+  }
+  const status = optEnum<'DRAFT' | 'IN_DISCUSSION'>(o['status'], 'status', [
+    'DRAFT',
+    'IN_DISCUSSION',
+  ]);
+  if (status !== undefined) payload.status = status;
+  if (o['alternatives'] !== undefined) payload.alternatives = buildAlternatives(o['alternatives']);
+  if (o['references'] !== undefined) payload.references = buildReferences(o['references']);
+  return payload;
+}
+
+/** Sanitize a decision list query DTO (main process rebuilds the query string; server re-checks). */
+function buildDecisionListQuery(value: unknown): DecisionListQuery {
+  if (value === undefined || value === null) return {};
+  const o = asObject(value);
+  const query: DecisionListQuery = {};
+  const status = optEnum<DecisionStatus>(o['status'], 'status', DECISION_STATUSES);
+  if (status !== undefined) query.status = status;
+  const source = optEnum<DecisionSource>(o['source'], 'source', DECISION_SOURCES);
+  if (source !== undefined) query.source = source;
+  const projectId = contextLink(o, 'projectId');
+  if (projectId !== undefined) query.projectId = projectId;
+  const participantId = contextLink(o, 'participantId');
+  if (participantId !== undefined) query.participantId = participantId;
+  const search = optStr(o['search'], 'search');
+  if (search !== undefined) query.search = search;
+  const sort = optEnum<DecisionSortField>(o['sort'], 'sort', DECISION_SORT_FIELDS);
+  if (sort !== undefined) query.sort = sort;
+  const dir = optEnum<'asc' | 'desc'>(o['dir'], 'dir', ['asc', 'desc']);
+  if (dir !== undefined) query.dir = dir;
+  if (typeof o['limit'] === 'number') query.limit = o['limit'];
+  const cursor = optStr(o['cursor'], 'cursor');
+  if (cursor !== undefined) query.cursor = cursor;
+  return query;
+}
+
+/** Build the one-field participant payload; the id is re-validated as a member by the server. */
+function buildParticipantInput(o: Record<string, unknown>): DecisionParticipantInput {
+  return { userId: reqId(o['userId'], 'userId') };
 }
 
 function toIpcError(error: unknown): IpcError {
@@ -401,6 +764,324 @@ export function registerIpc(): void {
           reqId(workspaceId, 'workspaceId'),
           reqId(conversationId, 'conversationId'),
           reqId(userId, 'userId'),
+        ),
+      ),
+  );
+
+  // ---- projects (Phase 4; ids interpolated into paths, so strictly validated) ----
+  ipcMain.handle(IPC.PROJECTS_LIST, (event, workspaceId: unknown, query: unknown) =>
+    handle(event, () =>
+      api.projects.list(reqId(workspaceId, 'workspaceId'), buildProjectListQuery(query)),
+    ),
+  );
+
+  ipcMain.handle(IPC.PROJECTS_CREATE, (event, workspaceId: unknown, input: unknown) =>
+    handle(event, () =>
+      api.projects.create(reqId(workspaceId, 'workspaceId'), buildCreateProject(asObject(input))),
+    ),
+  );
+
+  ipcMain.handle(IPC.PROJECTS_GET_OVERVIEW, (event, workspaceId: unknown, projectId: unknown) =>
+    handle(event, () =>
+      api.projects.getOverview(reqId(workspaceId, 'workspaceId'), reqId(projectId, 'projectId')),
+    ),
+  );
+
+  ipcMain.handle(
+    IPC.PROJECTS_UPDATE,
+    (event, workspaceId: unknown, projectId: unknown, input: unknown) =>
+      handle(event, () =>
+        api.projects.update(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(projectId, 'projectId'),
+          buildUpdateProject(asObject(input)),
+        ),
+      ),
+  );
+
+  ipcMain.handle(IPC.PROJECTS_ARCHIVE, (event, workspaceId: unknown, projectId: unknown) =>
+    handle(event, () =>
+      api.projects.archive(reqId(workspaceId, 'workspaceId'), reqId(projectId, 'projectId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.PROJECTS_RESTORE, (event, workspaceId: unknown, projectId: unknown) =>
+    handle(event, () =>
+      api.projects.restore(reqId(workspaceId, 'workspaceId'), reqId(projectId, 'projectId')),
+    ),
+  );
+
+  // ---- tasks (Phase 5; ids interpolated into paths, so strictly validated; inputs via builders) ----
+  ipcMain.handle(
+    IPC.TASKS_LIST,
+    (event, workspaceId: unknown, projectId: unknown, query: unknown) =>
+      handle(event, () =>
+        api.tasks.list(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(projectId, 'projectId'),
+          buildTaskListQuery(query),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.TASKS_CREATE,
+    (event, workspaceId: unknown, projectId: unknown, input: unknown) =>
+      handle(event, () =>
+        api.tasks.create(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(projectId, 'projectId'),
+          buildCreateTask(asObject(input)),
+        ),
+      ),
+  );
+
+  ipcMain.handle(IPC.TASKS_GET, (event, workspaceId: unknown, taskId: unknown) =>
+    handle(event, () => api.tasks.get(reqId(workspaceId, 'workspaceId'), reqId(taskId, 'taskId'))),
+  );
+
+  ipcMain.handle(IPC.TASKS_UPDATE, (event, workspaceId: unknown, taskId: unknown, input: unknown) =>
+    handle(event, () =>
+      api.tasks.update(
+        reqId(workspaceId, 'workspaceId'),
+        reqId(taskId, 'taskId'),
+        buildUpdateTask(asObject(input)),
+      ),
+    ),
+  );
+
+  ipcMain.handle(IPC.TASKS_REMOVE, (event, workspaceId: unknown, taskId: unknown) =>
+    handle(event, () =>
+      api.tasks.remove(reqId(workspaceId, 'workspaceId'), reqId(taskId, 'taskId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.TASKS_ASSIGN, (event, workspaceId: unknown, taskId: unknown, input: unknown) =>
+    handle(event, () => {
+      const o = asObject(input);
+      if (o['assigneeId'] === undefined) {
+        throw new ApiRequestError('INVALID_ARGUMENT', 'assigneeId is required (may be null)');
+      }
+      const payload: AssignTaskInput = {
+        assigneeId: o['assigneeId'] === null ? null : reqId(o['assigneeId'], 'assigneeId'),
+      };
+      return api.tasks.assign(reqId(workspaceId, 'workspaceId'), reqId(taskId, 'taskId'), payload);
+    }),
+  );
+
+  ipcMain.handle(
+    IPC.TASKS_CHANGE_STATUS,
+    (event, workspaceId: unknown, taskId: unknown, input: unknown) =>
+      handle(event, () => {
+        const o = asObject(input);
+        const payload: ChangeTaskStatusInput = {
+          status: optEnum<TaskStatus>(o['status'], 'status', TASK_STATUSES) as TaskStatus,
+        };
+        if (!payload.status) {
+          throw new ApiRequestError('INVALID_ARGUMENT', 'status is required');
+        }
+        return api.tasks.changeStatus(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(taskId, 'taskId'),
+          payload,
+        );
+      }),
+  );
+
+  ipcMain.handle(IPC.TASKS_DEPENDENCIES, (event, workspaceId: unknown, taskId: unknown) =>
+    handle(event, () =>
+      api.tasks.dependencies(reqId(workspaceId, 'workspaceId'), reqId(taskId, 'taskId')),
+    ),
+  );
+
+  ipcMain.handle(
+    IPC.TASKS_ADD_DEPENDENCY,
+    (event, workspaceId: unknown, taskId: unknown, input: unknown) =>
+      handle(event, () => {
+        const o = asObject(input);
+        const payload: AddTaskDependencyInput = {
+          dependsOnTaskId: reqId(o['dependsOnTaskId'], 'dependsOnTaskId'),
+        };
+        return api.tasks.addDependency(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(taskId, 'taskId'),
+          payload,
+        );
+      }),
+  );
+
+  ipcMain.handle(
+    IPC.TASKS_REMOVE_DEPENDENCY,
+    (event, workspaceId: unknown, taskId: unknown, dependencyId: unknown) =>
+      handle(event, () =>
+        api.tasks.removeDependency(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(taskId, 'taskId'),
+          reqId(dependencyId, 'dependencyId'),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.TASKS_ACTIVITY,
+    (event, workspaceId: unknown, taskId: unknown, query: unknown) =>
+      handle(event, () =>
+        api.tasks.activity(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(taskId, 'taskId'),
+          buildActivityQuery(query),
+        ),
+      ),
+  );
+
+  ipcMain.handle(IPC.TASKS_ASSIGNED_TO_ME, (event, workspaceId: unknown) =>
+    handle(event, () => api.tasks.assignedToMe(reqId(workspaceId, 'workspaceId'))),
+  );
+
+  // ---- decisions (Phase 6; ids interpolated into paths, so strictly validated; inputs via builders) ----
+  ipcMain.handle(IPC.DECISIONS_LIST, (event, workspaceId: unknown, query: unknown) =>
+    handle(event, () =>
+      api.decisions.list(reqId(workspaceId, 'workspaceId'), buildDecisionListQuery(query)),
+    ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_CREATE, (event, workspaceId: unknown, input: unknown) =>
+    handle(event, () =>
+      api.decisions.create(
+        reqId(workspaceId, 'workspaceId'),
+        buildCreateDecision(asObject(input)),
+      ),
+    ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_GET, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.get(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_UPDATE,
+    (event, workspaceId: unknown, decisionId: unknown, input: unknown) =>
+      handle(event, () =>
+        api.decisions.update(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          buildUpdateDecision(asObject(input)),
+        ),
+      ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_REMOVE, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.remove(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_FINALIZE, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.finalize(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_SUPERSEDE,
+    (event, workspaceId: unknown, decisionId: unknown, input: unknown) =>
+      handle(event, () => {
+        const o = asObject(input);
+        const payload: SupersedeDecisionInput = {
+          byDecisionId: reqId(o['byDecisionId'], 'byDecisionId'),
+        };
+        return api.decisions.supersede(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          payload,
+        );
+      }),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_ARCHIVE, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.archive(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_RESTORE, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.restore(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_ADD_PARTICIPANT,
+    (event, workspaceId: unknown, decisionId: unknown, input: unknown) =>
+      handle(event, () =>
+        api.decisions.addParticipant(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          buildParticipantInput(asObject(input)),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_REMOVE_PARTICIPANT,
+    (event, workspaceId: unknown, decisionId: unknown, userId: unknown) =>
+      handle(event, () =>
+        api.decisions.removeParticipant(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          reqId(userId, 'userId'),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_HISTORY,
+    (event, workspaceId: unknown, decisionId: unknown, query: unknown) =>
+      handle(event, () =>
+        api.decisions.history(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          buildActivityQuery(query),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_LIST_COMMENTS,
+    (event, workspaceId: unknown, decisionId: unknown, query: unknown) =>
+      handle(event, () =>
+        api.decisions.listComments(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          buildActivityQuery(query),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_ADD_COMMENT,
+    (event, workspaceId: unknown, decisionId: unknown, input: unknown) =>
+      handle(event, () => {
+        const o = asObject(input);
+        const payload: CreateDecisionCommentInput = { body: reqStr(o['body'], 'body') };
+        return api.decisions.addComment(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          payload,
+        );
+      }),
+  );
+
+  ipcMain.handle(
+    IPC.DECISIONS_DELETE_COMMENT,
+    (event, workspaceId: unknown, decisionId: unknown, commentId: unknown) =>
+      handle(event, () =>
+        api.decisions.deleteComment(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(decisionId, 'decisionId'),
+          reqId(commentId, 'commentId'),
         ),
       ),
   );

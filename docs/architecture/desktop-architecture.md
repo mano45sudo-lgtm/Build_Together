@@ -27,7 +27,7 @@ apps/desktop/
     layouts/AppShell.tsx
     components/   # Sidebar, ApiStatusIndicator + ui/ primitives (Button, Input, Dialog, Field, ...)
     features/     # auth (Welcome), workspace (switcher/onboarding), team (members/invites),
-                  # home, settings
+                  # chat (messages), projects (list/create/workspace/settings), home, settings
     state/        # AuthProvider (session + workspace scoping for the renderer)
     hooks/        # useResource (load/error/empty/reload)
     lib/          # bridge (unwrap IpcOutcome→BridgeError), data (window.bt façade), rbac (visibility),
@@ -81,8 +81,8 @@ one source of truth and cannot drift.
 ## Renderer ⇄ API communication
 
 The renderer performs **no** privileged network work and never learns a token. It calls named
-`window.bt` methods (auth/users/workspaces/members/invitations); **main** translates each into
-an HTTPS call to the Express API, applies the `{ data, error, meta }` envelope, and returns an
+`window.bt` methods (auth/users/workspaces/members/invitations/chat/projects); **main** translates each
+into an HTTPS call to the Express API, applies the `{ data, error, meta }` envelope, and returns an
 `IpcOutcome<T>` — `{ ok, data }` or `{ ok:false, error:{ code, message, details } }` — never
 containing a token (`AuthSessionView` = identity + workspaces only). The renderer has no `fetch`
 path to the API for authenticated operations. Outside Electron (tests / preview) the bridge is
@@ -110,7 +110,12 @@ source-only package at runtime.
 - Password reset and email verification are not yet implemented (ADR-0003); invitation email
   uses a clearly-labelled **dev transport** (returns the link to the authorized inviter) until a
   real provider is configured.
-- Search and quick-create remain honest placeholders; messaging/projects/tasks are Phase 3+/4+.
+- Search and quick-create remain honest placeholders; conversation→task, tasks and Kanban are Phase 5+.
+- **Projects** (Phase 4) are functional: the `window.bt.projects` namespace (list/create/getOverview/
+  update/archive/restore) is exposed over sender- and argument-validated IPC (`reqId` on the
+  path-interpolated workspace/project ids; `buildCreateProject`/`buildUpdateProject`/
+  `buildProjectListQuery` allowlist the payload + query), driven by main's authenticated client, with
+  the Impeccable Projects surface in the renderer. **Tokens never reach the renderer**.
 - macOS-specific menu/window behaviors and `safeStorage` (Keychain) are implemented via standard
   APIs but validated on Windows (DPAPI) only.
 - The workspace switcher, team management, invitations and settings are now **functional**

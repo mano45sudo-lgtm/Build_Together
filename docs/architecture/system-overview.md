@@ -59,6 +59,10 @@ compiling scaffolds. **Phase 1** converted the client to a **desktop-first Elect
 architecture — `apps/desktop` (main/preload/renderer) with a hardened IPC bridge, a design-
 token foundation and an app shell — and retired `apps/web`. It ships a secure, running
 desktop shell and **no product features** (no auth, workspaces, messaging, tasks or AI).
-Subsequent phases build capabilities in `docs/development/phase-roadmap.md`. Each domain is
-detailed in the sibling architecture docs and governed by the matching skill in
+Since then the functional layers have landed phase by phase: **Phase 2** identity/workspaces/RBAC,
+**Phase 3** workspace GROUP + DIRECT messaging over Nexconn, and **Phase 4** the workspace-scoped
+**Projects** foundation (the `Project` entity + server-side project RBAC, REST surface, Electron IPC
+chain and Impeccable Projects screens). Tasks/Kanban, conversation→task, decisions and AI remain
+later phases. Subsequent phases build capabilities in `docs/development/phase-roadmap.md`. Each
+domain is detailed in the sibling architecture docs and governed by the matching skill in
 `.claude/skills/`.

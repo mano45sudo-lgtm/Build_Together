@@ -1,79 +1,40 @@
 import {
-  Archive,
+  ClipboardList,
   Folder,
   Home,
-  ListChecks,
   MessageSquare,
-  Plug,
   Settings,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 
-export type NavId =
-  | 'home'
-  | 'messages'
-  | 'my-work'
-  | 'projects'
-  | 'connected-apps'
-  | 'decision-vault'
-  | 'team'
-  | 'settings';
+export type NavId = 'home' | 'mywork' | 'projects' | 'messages' | 'team' | 'settings';
+
+export type NavGroup = 'main' | 'workspace';
 
 export interface NavItem {
   id: NavId;
   label: string;
   icon: LucideIcon;
-  /** Product feature that will eventually live here — surfaced honestly in the placeholder. */
-  arrival: string;
+  /** Sidebar section: primary navigation vs workspace management. Drives the group divider. */
+  group: NavGroup;
 }
 
 /**
- * Project-centric primary navigation (Phase 1 brief §7). These are entry points only —
- * no future-phase functionality is implemented. Content regions show honest placeholders.
+ * Navigation rail (redesign brief §3.1). Only surfaces with real, implemented functionality are
+ * listed — no placeholder entry points. Grouping separates the main task nav (Home / My Work /
+ * Projects / Conversations) from workspace management (Members / Settings).
  */
 export const NAV_ITEMS: readonly NavItem[] = [
-  {
-    id: 'home',
-    label: 'Home',
-    icon: Home,
-    arrival: 'Workspace overview arrives in a later phase.',
-  },
-  {
-    id: 'messages',
-    label: 'Messages',
-    icon: MessageSquare,
-    arrival: 'Realtime conversation for this workspace.',
-  },
-  {
-    id: 'my-work',
-    label: 'My Work',
-    icon: ListChecks,
-    arrival: 'Assigned tasks arrive with task management.',
-  },
-  {
-    id: 'projects',
-    label: 'Projects',
-    icon: Folder,
-    arrival: 'Projects arrive with workspace management.',
-  },
-  {
-    id: 'connected-apps',
-    label: 'Connected Apps',
-    icon: Plug,
-    arrival: 'Figma, GitHub and more arrive with integrations.',
-  },
-  {
-    id: 'decision-vault',
-    label: 'Decision Vault',
-    icon: Archive,
-    arrival: 'The Decision Vault arrives in a later phase.',
-  },
-  { id: 'team', label: 'Team', icon: Users, arrival: 'Team and presence arrive with Nexconn.' },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings,
-    arrival: 'Settings arrive with authentication.',
-  },
+  { id: 'home', label: 'Home', icon: Home, group: 'main' },
+  { id: 'mywork', label: 'My Work', icon: ClipboardList, group: 'main' },
+  { id: 'projects', label: 'Projects', icon: Folder, group: 'main' },
+  { id: 'messages', label: 'Conversations', icon: MessageSquare, group: 'main' },
+  { id: 'team', label: 'Members', icon: Users, group: 'workspace' },
+  { id: 'settings', label: 'Settings', icon: Settings, group: 'workspace' },
 ] as const;
+
+export const MAIN_NAV: readonly NavItem[] = NAV_ITEMS.filter((item) => item.group === 'main');
+export const WORKSPACE_NAV: readonly NavItem[] = NAV_ITEMS.filter(
+  (item) => item.group === 'workspace',
+);

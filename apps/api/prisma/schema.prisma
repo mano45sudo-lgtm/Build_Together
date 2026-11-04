@@ -48,6 +48,122 @@ enum WebhookStatus {
   IGNORED
 }
 
+/// Work lifecycle of a project (Phase 4). `ARCHIVED` is deliberately NOT a status value: archive
+/// state is carried solely by the nullable `Project.archivedAt` timestamp, so lifecycle and archive
+/// stay orthogonal and nothing is stored twice (database-engineering: avoid redundant/derived data).
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+/// Who can see a project inside its workspace (Phase 4). WORKSPACE = every member; PRIVATE = the
+/// owner + creator, plus workspace OWNER/ADMIN. Enforced server-side in the project service.
+enum ProjectVisibility {
+  WORKSPACE
+  PRIVATE
+}
+
+/// Task workflow lifecycle (Phase 5). A closed, extensible state machine; it is deliberately kept
+/// SEPARATE from dependency/blocked state — completing a prerequisite never auto-moves a dependent
+/// task (product brief §7). `DONE` is terminal and stamps `completedAt` server-side.
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+/// Task urgency (Phase 5). Independent of workflow `TaskStatus`.
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+/// The important events recorded on a task's activity timeline (Phase 5). A small closed vocabulary,
+/// not a general audit platform — one row per meaningful mutation, workspace- and project-scoped.
+enum TaskActivityType {
+  CREATED
+  UPDATED
+  ASSIGNEE_CHANGED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  DUE_DATE_CHANGED
+  DEPENDENCY_ADDED
+  DEPENDENCY_REMOVED
+  COMPLETED
+}
+
+/// Decision Vault lifecycle (Phase 6). A closed state machine per the product brief:
+/// DRAFT → PROPOSED → APPROVED, with REJECTED (a reviewed proposal that was not accepted — it stays
+/// readable for historical reference), SUPERSEDED (replaced by a newer decision) and ARCHIVED (left the
+/// active set; restore returns the pre-archive status). Only the transitions documented in
+/// `decision.service` are legal; APPROVED requires a non-empty decision statement. Archive state ALSO
+/// rides on `Decision.archivedAt`, so the timeline can show when a decision left the active set without
+/// re-deriving it.
+enum DecisionStatus {
+  DRAFT
+  PROPOSED
+  APPROVED
+  REJECTED
+  SUPERSEDED
+  ARCHIVED
+}
+
+/// Decision subject area (Phase 6). A small, useful, CLOSED set for vault filtering — extensible by
+/// adding a value here plus the matching migration (`ALTER TYPE ... ADD VALUE`), never by free text, so
+/// filters stay reliable. GENERAL is the default: recording a decision must never require categorising it.
+enum DecisionCategory {
+  PRODUCT
+  DESIGN
+  ENGINEERING
+  BUSINESS
+  OPERATIONS
+  GENERAL
+}
+
+/// Where a decision came from (Phase 6). Provenance only — the authoritative context lives in the
+/// nullable `projectId` / `conversationId` / `taskId` links. MEETING is carried per the product brief
+/// (no meeting entity exists yet, so no producer sets it; it is part of the closed vocabulary).
+enum DecisionSource {
+  PROJECT
+  CONVERSATION
+  TASK
+  MEETING
+  MANUAL
+}
+
+/// The kinds of evidence a decision can cite (Phase 6). DOCUMENT/LINK/FILE carry a `url`;
+/// TASK/CONVERSATION/DECISION carry an `entityId` resolved workspace-side for navigation.
+enum DecisionReferenceType {
+  DOCUMENT
+  LINK
+  TASK
+  CONVERSATION
+  DECISION
+  FILE
+}
+
+/// The important events recorded on a decision's history timeline (Phase 6). Same shape as task
+/// activity: a small closed vocabulary with a pre-rendered human `message`, not an audit platform.
+enum DecisionHistoryType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  APPROVED
+  REJECTED
+  SUPERSEDED
+  ALTERNATIVES_CHANGED
+  REFERENCES_CHANGED
+  PARTICIPANT_CHANGED
+  OWNER_CHANGED
+  ARCHIVED
+  RESTORED
+}
+
 // ---- Identity ----
 
 model User {
@@ -67,6 +183,16 @@ model User {
   nexconnMapping    NexconnUserMapping?
   conversationsCreated WorkspaceConversation[]  @relation("ConversationCreator")
   conversationParts    ConversationParticipant[]
+  projectsOwned        Project[]                @relation("ProjectOwner")
+  projectsCreated      Project[]                @relation("ProjectCreator")
+  tasksCreated         Task[]                   @relation("TaskCreator")
+  tasksAssigned        Task[]                   @relation("TaskAssignee")
+  taskActivities       TaskActivity[]           @relation("TaskActivityActor")
+  decisionsCreated     Decision[]               @relation("DecisionCreator")
+  decisionsOwned       Decision[]               @relation("DecisionOwner")
+  decisionParticipants   DecisionParticipant[]
+  decisionHistory      DecisionHistory[]        @relation("DecisionHistoryActor")
+  decisionComments     DecisionComment[]        @relation("DecisionCommentAuthor")
 
   @@index([status])
 }
@@ -109,6 +235,9 @@ model Workspace {
   memberships  WorkspaceMembership[]
   invitations  WorkspaceInvitation[]
   conversations WorkspaceConversation[]
+  projects    Project[]
+  tasks       Task[]
+  decisions   Decision[]
 
   @@index([createdById])
 }
@@ -157,6 +286,277 @@ model WorkspaceInvitation {
   @@index([expiresAt])
 }
 
+// ---- Projects (Phase 4 — the primary organizational unit within a workspace) ----
+
+/// A project lives in exactly one workspace and is the anchor for later conversations/tasks/decisions.
+/// Authorization rides the existing workspace membership (no parallel project-membership system): the
+/// `ownerId` must be a current member of the same workspace (enforced in the service, and by the
+/// `ProjectOwner`/workspace scoping at read time). `projectKey` and `slug` are unique WITHIN the
+/// workspace, so the same human-friendly key can recur across unrelated workspaces. Archiving sets
+/// `archivedAt`; restoring clears it — `status` remains the independent work lifecycle.
+model Project {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  description String?
+  projectKey  String
+  status      ProjectStatus     @default(ACTIVE)
+  visibility  ProjectVisibility @default(WORKSPACE)
+  ownerId     String
+  owner       User              @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  createdById String
+  createdBy   User              @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  startDate   DateTime?
+  targetDate  DateTime?
+  icon        String?
+  color       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  archivedAt  DateTime?
+
+  @@unique([workspaceId, projectKey])
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, archivedAt])
+  @@index([ownerId])
+
+  tasks Task[]
+  decisions Decision[]
+}
+
+// ---- Tasks (Phase 5 — the execution layer inside a project) ----
+
+/// A unit of work that belongs to exactly one project AND one workspace. The redundant `workspaceId`
+/// is deliberate: it lets every read be workspace-scoped at the DB layer (isolation is the security
+/// boundary) and every index be workspace-first, without a join back through the project. The service
+/// guarantees `workspaceId == task.project.workspaceId` on create. `assigneeId` is nullable (unassigned
+/// reads clearly) and, if the assignee's account is ever removed, falls back to unassigned via SetNull
+/// — never orphaning or deleting the work. `completedAt` is stamped only while `status == DONE`.
+model Task {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      TaskStatus    @default(TODO)
+  priority    TaskPriority  @default(MEDIUM)
+  createdById String
+  createdBy   User          @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assigneeId  String?
+  assignee    User?         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  startDate   DateTime?
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  dependenciesIn  TaskDependency[] @relation("TaskDependent")
+  dependenciesOut TaskDependency[] @relation("TaskDependency")
+  activity        TaskActivity[]
+  decisions       Decision[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, priority])
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([dueDate])
+}
+
+/// A directed prerequisite edge: `task` (the dependent) cannot be considered unblocked until
+/// `dependsOnTask` (the prerequisite) is DONE. Unique per (dependent, prerequisite) so a duplicate
+/// relationship is impossible at the DB layer; self-edges and cycles are rejected in the service
+/// (a DB check cannot express transitive cycles). Both endpoints are constrained to the same project
+/// and workspace by the service; the redundant `workspaceId` keeps the edge workspace-scoped for reads.
+model TaskDependency {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  taskId          String
+  task            Task     @relation("TaskDependent", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId String
+  dependsOnTask   Task     @relation("TaskDependency", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([workspaceId])
+  @@index([dependsOnTaskId])
+}
+
+/// One event on a task's timeline. Carries a pre-rendered human `message` (the vocabulary is closed and
+/// locale-stable) plus the acting user, so the activity feed needs no re-derivation. Scoped by the
+/// task's workspace AND project (denormalized for cheap, isolated pagination) and cascade-deleted with
+/// the task. `actor` is Restrict (an audit row outlives the account in the normal DISABLED flow).
+model TaskActivity {
+  id          String           @id @default(cuid())
+  workspaceId String
+  projectId   String
+  taskId      String
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  type        TaskActivityType
+  message     String
+  actorId     String
+  actor       User             @relation("TaskActivityActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt   DateTime         @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+/// A Decision Vault entry (Phase 6). Decisions are FIRST-CLASS records: created deliberately, never
+/// auto-derived from messages. Every decision belongs to exactly one workspace (denormalized
+/// `workspaceId` keeps every read workspace-scoped at the DB layer — the isolation boundary). Its
+/// context links (`projectId` / `conversationId` / `taskId`) are nullable and use SetNull: a decision
+/// SURVIVES deletion of the linked context and remains as a workspace decision (brief: "do not destroy
+/// decisions when project/task/conversation data is deleted"). `supersededById` forms the replacement
+/// chain (a superseded decision points at the newer one; SetNull keeps both records if the replacement
+/// is ever removed). Before APPROVAL the decision statement may be empty; the service enforces it before
+/// the status reaches APPROVED. `ownerId` is the accountable person (defaults to the creator, movable by
+/// a manager and always a current workspace member); `createdById` stays as the authorship record.
+model Decision {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation   WorkspaceConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  taskId         String?
+  task           Task?             @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  title          String
+  summary        String?
+  background     String?
+  decision       String?
+  rationale      String?
+  consequences   String?
+  status         DecisionStatus    @default(DRAFT)
+  category       DecisionCategory  @default(GENERAL)
+  source         DecisionSource    @default(MANUAL)
+  createdById    String
+  createdBy      User              @relation("DecisionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  ownerId        String
+  owner          User              @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  supersededAt   DateTime?
+  archivedAt     DateTime?
+  /// The status held before ARCHIVED, so RESTORE returns the decision where it left off.
+  preArchiveStatus DecisionStatus?
+  supersededById String?
+  supersededBy   Decision?         @relation("DecisionSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     Decision[]        @relation("DecisionSupersede")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  alternatives  DecisionAlternative[]
+  references    DecisionReference[]
+  participants  DecisionParticipant[]
+  comments      DecisionComment[]
+  history       DecisionHistory[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, projectId])
+  @@index([workspaceId, category])
+  @@index([workspaceId, ownerId])
+  @@index([workspaceId, createdAt])
+  @@index([conversationId])
+  @@index([taskId])
+  @@index([supersededById])
+}
+
+/// A considered option on a decision. Child of the decision (cascade): alternatives are meaningless
+/// without their decision, unlike the durable context links above. Exactly one MAY be `chosen` —
+/// enforced in the service on every alternatives write. The pros/cons and `rejectionReason` are the
+/// "why not" record the brief asks for: an option that lost is kept with its reasoning, not deleted.
+model DecisionAlternative {
+  id              String   @id @default(cuid())
+  decisionId      String
+  decision        Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  label           String
+  description     String?
+  advantages      String?
+  disadvantages   String?
+  rejectionReason String?
+  chosen          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([decisionId])
+}
+
+/// Evidence cited by a decision. Same cascade ownership as alternatives. `url` is set for
+/// DOCUMENT/LINK/FILE; `entityId` is set for TASK/CONVERSATION and validated (same workspace) by the
+/// service — the DB cannot express a polymorphic FK, so the repo resolves it workspace-scoped at read.
+model DecisionReference {
+  id         String                @id @default(cuid())
+  decisionId String
+  decision   Decision              @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  type       DecisionReferenceType
+  label      String
+  url        String?
+  entityId   String?
+  createdAt  DateTime              @default(now())
+
+  @@index([decisionId])
+  @@index([decisionId, type])
+}
+
+/// Who was involved in the decision (also the stakeholder list for future notifications). Users cascade
+/// (a removed account should not block or vanish the durable record's roster); the relation set is
+/// unique so a participant cannot be added twice.
+model DecisionParticipant {
+  id         String   @id @default(cuid())
+  decisionId String
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([decisionId, userId])
+  @@index([userId])
+}
+
+/// A discussion comment on a decision. Reuses the same author + workspace pattern as task activity but
+/// is its own entity ("do not mix comments with unrelated future features"): hard-DELETE removes it,
+/// `updatedAt` reflects edits. Redundant `workspaceId` keeps every read workspace-scoped without a join.
+model DecisionComment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  decisionId  String
+  decision    Decision  @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation("DecisionCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  body        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([decisionId, createdAt])
+  @@index([workspaceId])
+}
+
+/// One event on a decision's history timeline (mirrors TaskActivity). Pre-rendered `message` + actor,
+/// workspace-denormalized for isolated reads, cascade-deleted with the decision.
+model DecisionHistory {
+  id          String              @id @default(cuid())
+  workspaceId String
+  decisionId  String
+  decision    Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  type        DecisionHistoryType
+  message     String
+  actorId     String
+  actor       User                @relation("DecisionHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt   DateTime            @default(now())
+
+  @@index([decisionId, createdAt])
+  @@index([workspaceId])
+}
+
 // ---- Real-time communication (Phase 3 — application metadata only, no message bodies) ----
 
 /// Maps a BuildTogether user (single source of truth) to a stable Nexconn identity. `externalId`
@@ -191,6 +591,7 @@ model WorkspaceConversation {
   updatedAt         DateTime         @updatedAt
 
   participants ConversationParticipant[]
+  decisions    Decision[]
 
   @@index([workspaceId])
   @@index([workspaceId, kind])

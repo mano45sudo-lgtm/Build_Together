@@ -73,6 +73,66 @@ const bridge: DesktopBridge = {
     removeMember: (workspaceId, conversationId, userId) =>
       invoke(IPC.CHAT_REMOVE_MEMBER, workspaceId, conversationId, userId),
   },
+
+  projects: {
+    list: (workspaceId, query) => invoke(IPC.PROJECTS_LIST, workspaceId, query),
+    create: (workspaceId, input) => invoke(IPC.PROJECTS_CREATE, workspaceId, input),
+    getOverview: (workspaceId, projectId) =>
+      invoke(IPC.PROJECTS_GET_OVERVIEW, workspaceId, projectId),
+    update: (workspaceId, projectId, input) =>
+      invoke(IPC.PROJECTS_UPDATE, workspaceId, projectId, input),
+    archive: (workspaceId, projectId) => invoke(IPC.PROJECTS_ARCHIVE, workspaceId, projectId),
+    restore: (workspaceId, projectId) => invoke(IPC.PROJECTS_RESTORE, workspaceId, projectId),
+  },
+
+  tasks: {
+    list: (workspaceId, projectId, query) => invoke(IPC.TASKS_LIST, workspaceId, projectId, query),
+    create: (workspaceId, projectId, input) =>
+      invoke(IPC.TASKS_CREATE, workspaceId, projectId, input),
+    get: (workspaceId, taskId) => invoke(IPC.TASKS_GET, workspaceId, taskId),
+    update: (workspaceId, taskId, input) => invoke(IPC.TASKS_UPDATE, workspaceId, taskId, input),
+    remove: (workspaceId, taskId) => invoke(IPC.TASKS_REMOVE, workspaceId, taskId),
+    assign: (workspaceId, taskId, input) => invoke(IPC.TASKS_ASSIGN, workspaceId, taskId, input),
+    changeStatus: (workspaceId, taskId, input) =>
+      invoke(IPC.TASKS_CHANGE_STATUS, workspaceId, taskId, input),
+    dependencies: (workspaceId, taskId) => invoke(IPC.TASKS_DEPENDENCIES, workspaceId, taskId),
+    addDependency: (workspaceId, taskId, input) =>
+      invoke(IPC.TASKS_ADD_DEPENDENCY, workspaceId, taskId, input),
+    removeDependency: (workspaceId, taskId, dependencyId) =>
+      invoke(IPC.TASKS_REMOVE_DEPENDENCY, workspaceId, taskId, dependencyId),
+    activity: (workspaceId, taskId, query) =>
+      invoke(IPC.TASKS_ACTIVITY, workspaceId, taskId, query),
+    assignedToMe: (workspaceId) => invoke(IPC.TASKS_ASSIGNED_TO_ME, workspaceId),
+  },
+
+  decisions: {
+    list: (workspaceId, query) => invoke(IPC.DECISIONS_LIST, workspaceId, query),
+    create: (workspaceId, input) => invoke(IPC.DECISIONS_CREATE, workspaceId, input),
+    get: (workspaceId, decisionId) => invoke(IPC.DECISIONS_GET, workspaceId, decisionId),
+    update: (workspaceId, decisionId, input) =>
+      invoke(IPC.DECISIONS_UPDATE, workspaceId, decisionId, input),
+    remove: (workspaceId, decisionId) => invoke(IPC.DECISIONS_REMOVE, workspaceId, decisionId),
+    finalize: (workspaceId, decisionId) =>
+      invoke(IPC.DECISIONS_FINALIZE, workspaceId, decisionId),
+    supersede: (workspaceId, decisionId, input) =>
+      invoke(IPC.DECISIONS_SUPERSEDE, workspaceId, decisionId, input),
+    archive: (workspaceId, decisionId) =>
+      invoke(IPC.DECISIONS_ARCHIVE, workspaceId, decisionId),
+    restore: (workspaceId, decisionId) =>
+      invoke(IPC.DECISIONS_RESTORE, workspaceId, decisionId),
+    addParticipant: (workspaceId, decisionId, input) =>
+      invoke(IPC.DECISIONS_ADD_PARTICIPANT, workspaceId, decisionId, input),
+    removeParticipant: (workspaceId, decisionId, userId) =>
+      invoke(IPC.DECISIONS_REMOVE_PARTICIPANT, workspaceId, decisionId, userId),
+    history: (workspaceId, decisionId, query) =>
+      invoke(IPC.DECISIONS_HISTORY, workspaceId, decisionId, query),
+    listComments: (workspaceId, decisionId, query) =>
+      invoke(IPC.DECISIONS_LIST_COMMENTS, workspaceId, decisionId, query),
+    addComment: (workspaceId, decisionId, input) =>
+      invoke(IPC.DECISIONS_ADD_COMMENT, workspaceId, decisionId, input),
+    deleteComment: (workspaceId, decisionId, commentId) =>
+      invoke(IPC.DECISIONS_DELETE_COMMENT, workspaceId, decisionId, commentId),
+  },
 };
 
 contextBridge.exposeInMainWorld('bt', bridge);

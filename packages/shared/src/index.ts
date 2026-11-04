@@ -41,9 +41,6 @@ export function isSuccess<T>(
   return res.error === null && res.data !== null;
 }
 
-/** Task lifecycle states referenced by the product plan (work phase). */
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
-
 /** Health probe shape shared between api and any consumer. */
 export interface HealthReport {
   status: 'ok';
@@ -59,3 +56,12 @@ export * from './domain';
 
 // ---- Phase 3 communication contracts (workspace-scoped chat over Nexconn) ----
 export * from './chat';
+
+// ---- Phase 4 project contracts (workspace-scoped projects) ----
+export * from './projects';
+
+// ---- Phase 5 task contracts (project-scoped tasks, ownership, dependencies, activity) ----
+export * from './tasks';
+
+// ---- Phase 6 Decision Vault contracts (decisions, alternatives, references, comments, history) ----
+export * from './decisions';

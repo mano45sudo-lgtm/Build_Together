@@ -119,7 +119,7 @@ export function ConversationList({
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border-subtle bg-surface-1">
       <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
-        <h2 className="text-sm font-semibold text-primary">Messages</h2>
+        <h2 className="text-sm font-semibold text-primary">Conversations</h2>
         <Button size="sm" variant="secondary" onClick={onNew}>
           New
         </Button>

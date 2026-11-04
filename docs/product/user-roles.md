@@ -34,10 +34,29 @@ Roles are workspace-scoped. A person can hold different roles in different works
 4. Invitation role/email are bound at creation and checked at accept, so a token cannot grant a
    higher role or admit a different email than invited.
 
+## Project-level authorization (Phase 4 — built)
+
+Projects add no new role and no separate membership table — project rights are **derived** from the
+workspace role plus ownership/creatorship and the project's `visibility`. The matrix (enforced in
+`apps/api`, mirrored for visibility only in the renderer):
+
+| Actor                              | View                                     | Create | Update / archive / restore / change-owner |
+| ---------------------------------- | ---------------------------------------- | ------ | ----------------------------------------- |
+| Workspace **OWNER / ADMIN**        | All projects in workspace                | ✔      | ✔ (any project)                           |
+| **MEMBER** (project owner/creator) | Workspace-visible + own PRIVATE          | ✔      | ✔ (only projects they own/created)        |
+| **MEMBER** (other)                 | Workspace-visible (`WORKSPACE`) projects | ✔      | ✘                                         |
+
+Rules: assigning/reassigning a project owner to another user is an **OWNER/ADMIN** action and the
+target must be a current workspace member (`OWNER_NOT_MEMBER` otherwise); a project always keeps
+exactly one owner; a **PRIVATE** project is visible only to its owner/creator and workspace
+OWNER/ADMIN — a non-entitled read returns **404** (existence not leaked); cross-workspace access is
+always **404**. This respects the same IDOR boundary as the cross-cutting rules above.
+
 ## Notes for later phases
 
 - **Guest** and any further roles are additive; keep the permission model data-driven so new
   roles don't require code changes.
-- Billing/plan capabilities and channel/project-scoped permissions arrive with their phases.
+- Billing/plan capabilities and channel-scoped (project↔Nexconn) permissions arrive with their phases;
+  project-scoped permissions landed in Phase 4 (see the project-level matrix above).
 - Presence of AI features (summaries/actions) may introduce visibility questions (who can
   request/generate) — decided in the AI phase, respecting the same isolation rules.

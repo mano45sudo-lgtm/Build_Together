@@ -27,6 +27,37 @@ import type {
   WorkspaceSummary,
 } from './domain';
 import type { ChatToken, ConversationSummary, CreateConversationInput } from './chat';
+import type {
+  CreateProjectInput,
+  ProjectListQuery,
+  ProjectOverview,
+  ProjectView,
+  UpdateProjectInput,
+} from './projects';
+import type {
+  AddTaskDependencyInput,
+  AssignTaskInput,
+  ChangeTaskStatusInput,
+  CreateTaskInput,
+  MyTaskView,
+  TaskActivityView,
+  TaskDependencies,
+  TaskListQuery,
+  TaskView,
+  UpdateTaskInput,
+} from './tasks';
+import type {
+  CreateDecisionCommentInput,
+  CreateDecisionInput,
+  DecisionCommentView,
+  DecisionDetailView,
+  DecisionHistoryView,
+  DecisionListQuery,
+  DecisionParticipantInput,
+  DecisionView,
+  SupersedeDecisionInput,
+  UpdateDecisionInput,
+} from './decisions';
 
 /** Non-secret runtime configuration the main process resolves and hands to the renderer. */
 export interface DesktopConfig {
@@ -123,6 +154,132 @@ export interface DesktopBridge {
       userId: string,
     ): Promise<IpcOutcome<null>>;
   };
+  /**
+   * Phase 4 projects (workspace-scoped). The renderer passes only ids + inputs; the trusted main
+   * process attaches the session and the SERVER decides membership/role/ownership on every call. The
+   * list query is a plain DTO (the main process rebuilds a safe query string) — search / filter /
+   * scope are applied server-side, never in the renderer.
+   */
+  projects: {
+    list(workspaceId: string, query: ProjectListQuery): Promise<IpcOutcome<ProjectView[]>>;
+    create(workspaceId: string, input: CreateProjectInput): Promise<IpcOutcome<ProjectView>>;
+    getOverview(workspaceId: string, projectId: string): Promise<IpcOutcome<ProjectOverview>>;
+    update(
+      workspaceId: string,
+      projectId: string,
+      input: UpdateProjectInput,
+    ): Promise<IpcOutcome<ProjectView>>;
+    archive(workspaceId: string, projectId: string): Promise<IpcOutcome<ProjectView>>;
+    restore(workspaceId: string, projectId: string): Promise<IpcOutcome<ProjectView>>;
+  };
+  /**
+   * Phase 5 tasks (workspace- and project-scoped). Same trust model as projects: the renderer passes
+   * only ids + inputs; the trusted main process attaches the session and the SERVER decides workspace
+   * membership, project visibility/ownership, assignee validity and dependency legality on every call.
+   * `list`/`activity` are paginated; `assignedToMe` powers My Work across the caller's visible projects.
+   */
+  tasks: {
+    list(
+      workspaceId: string,
+      projectId: string,
+      query: TaskListQuery,
+    ): Promise<IpcOutcome<TaskView[]>>;
+    create(
+      workspaceId: string,
+      projectId: string,
+      input: CreateTaskInput,
+    ): Promise<IpcOutcome<TaskView>>;
+    get(workspaceId: string, taskId: string): Promise<IpcOutcome<TaskView>>;
+    update(
+      workspaceId: string,
+      taskId: string,
+      input: UpdateTaskInput,
+    ): Promise<IpcOutcome<TaskView>>;
+    remove(workspaceId: string, taskId: string): Promise<IpcOutcome<null>>;
+    assign(
+      workspaceId: string,
+      taskId: string,
+      input: AssignTaskInput,
+    ): Promise<IpcOutcome<TaskView>>;
+    changeStatus(
+      workspaceId: string,
+      taskId: string,
+      input: ChangeTaskStatusInput,
+    ): Promise<IpcOutcome<TaskView>>;
+    dependencies(workspaceId: string, taskId: string): Promise<IpcOutcome<TaskDependencies>>;
+    addDependency(
+      workspaceId: string,
+      taskId: string,
+      input: AddTaskDependencyInput,
+    ): Promise<IpcOutcome<TaskDependencies>>;
+    removeDependency(
+      workspaceId: string,
+      taskId: string,
+      dependencyId: string,
+    ): Promise<IpcOutcome<TaskDependencies>>;
+    activity(
+      workspaceId: string,
+      taskId: string,
+      query: { limit?: number; cursor?: string },
+    ): Promise<IpcOutcome<TaskActivityView[]>>;
+    assignedToMe(workspaceId: string): Promise<IpcOutcome<MyTaskView[]>>;
+  };
+  /**
+   * Phase 6 Decision Vault (workspace-scoped). Same trust model as projects/tasks: the renderer passes
+   * only ids + inputs; the trusted main process attaches the session and the SERVER decides workspace
+   * membership, project visibility/management, participant validity and lifecycle legality on every
+   * call. `list`/`history`/`comments` are paginated; owned sets (alternatives/references) use REPLACE
+   * semantics on update.
+   */
+  decisions: {
+    list(workspaceId: string, query: DecisionListQuery): Promise<IpcOutcome<DecisionView[]>>;
+    create(workspaceId: string, input: CreateDecisionInput): Promise<IpcOutcome<DecisionDetailView>>;
+    get(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    update(
+      workspaceId: string,
+      decisionId: string,
+      input: UpdateDecisionInput,
+    ): Promise<IpcOutcome<DecisionDetailView>>;
+    remove(workspaceId: string, decisionId: string): Promise<IpcOutcome<null>>;
+    finalize(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    supersede(
+      workspaceId: string,
+      decisionId: string,
+      input: SupersedeDecisionInput,
+    ): Promise<IpcOutcome<DecisionDetailView>>;
+    archive(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    restore(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    addParticipant(
+      workspaceId: string,
+      decisionId: string,
+      input: DecisionParticipantInput,
+    ): Promise<IpcOutcome<DecisionDetailView>>;
+    removeParticipant(
+      workspaceId: string,
+      decisionId: string,
+      userId: string,
+    ): Promise<IpcOutcome<DecisionDetailView>>;
+    history(
+      workspaceId: string,
+      decisionId: string,
+      query: { limit?: number; cursor?: string },
+    ): Promise<IpcOutcome<DecisionHistoryView[]>>;
+    listComments(
+      workspaceId: string,
+      decisionId: string,
+      query: { limit?: number; cursor?: string },
+    ): Promise<IpcOutcome<DecisionCommentView[]>>;
+    addComment(
+      workspaceId: string,
+      decisionId: string,
+      input: CreateDecisionCommentInput,
+    ): Promise<IpcOutcome<DecisionCommentView>>;
+    deleteComment(
+      workspaceId: string,
+      decisionId: string,
+      commentId: string,
+    ): Promise<IpcOutcome<null>>;
+  };
 }
 
 /** IPC channel names. Single source of truth so main and preload cannot drift. */
@@ -164,6 +321,42 @@ export const IPC = {
   CHAT_GET_CONVERSATION: 'chat:get-conversation',
   CHAT_ADD_MEMBERS: 'chat:add-members',
   CHAT_REMOVE_MEMBER: 'chat:remove-member',
+  // Projects (Phase 4 — workspace-scoped; server-authoritative)
+  PROJECTS_LIST: 'projects:list',
+  PROJECTS_CREATE: 'projects:create',
+  PROJECTS_GET_OVERVIEW: 'projects:get-overview',
+  PROJECTS_UPDATE: 'projects:update',
+  PROJECTS_ARCHIVE: 'projects:archive',
+  PROJECTS_RESTORE: 'projects:restore',
+  // Tasks (Phase 5 — workspace- and project-scoped; server-authoritative)
+  TASKS_LIST: 'tasks:list',
+  TASKS_CREATE: 'tasks:create',
+  TASKS_GET: 'tasks:get',
+  TASKS_UPDATE: 'tasks:update',
+  TASKS_REMOVE: 'tasks:remove',
+  TASKS_ASSIGN: 'tasks:assign',
+  TASKS_CHANGE_STATUS: 'tasks:change-status',
+  TASKS_DEPENDENCIES: 'tasks:dependencies',
+  TASKS_ADD_DEPENDENCY: 'tasks:add-dependency',
+  TASKS_REMOVE_DEPENDENCY: 'tasks:remove-dependency',
+  TASKS_ACTIVITY: 'tasks:activity',
+  TASKS_ASSIGNED_TO_ME: 'tasks:assigned-to-me',
+  // Decisions (Phase 6 — Decision Vault; workspace-scoped, server-authoritative)
+  DECISIONS_LIST: 'decisions:list',
+  DECISIONS_CREATE: 'decisions:create',
+  DECISIONS_GET: 'decisions:get',
+  DECISIONS_UPDATE: 'decisions:update',
+  DECISIONS_REMOVE: 'decisions:remove',
+  DECISIONS_FINALIZE: 'decisions:finalize',
+  DECISIONS_SUPERSEDE: 'decisions:supersede',
+  DECISIONS_ARCHIVE: 'decisions:archive',
+  DECISIONS_RESTORE: 'decisions:restore',
+  DECISIONS_ADD_PARTICIPANT: 'decisions:add-participant',
+  DECISIONS_REMOVE_PARTICIPANT: 'decisions:remove-participant',
+  DECISIONS_HISTORY: 'decisions:history',
+  DECISIONS_LIST_COMMENTS: 'decisions:list-comments',
+  DECISIONS_ADD_COMMENT: 'decisions:add-comment',
+  DECISIONS_DELETE_COMMENT: 'decisions:delete-comment',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

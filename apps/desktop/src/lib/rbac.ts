@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from '@buildtogether/shared';
+import type { ProjectView, WorkspaceRole } from '@buildtogether/shared';
 
 /**
  * Client-side visibility helpers ONLY. They hide actions the current role cannot perform so the UI
@@ -42,6 +42,27 @@ export function canRemove(actor: WorkspaceRole, target: WorkspaceRole, isSelf: b
 /** Only the owner can transfer, and only to an existing non-owner member. */
 export function canTransferTo(actor: WorkspaceRole, target: WorkspaceRole): boolean {
   return actor === 'OWNER' && target !== 'OWNER';
+}
+
+/**
+ * Project management mirror (client-side visibility ONLY — the server is authoritative). A workspace
+ * OWNER/ADMIN manages every project; a plain MEMBER manages only projects they own or created. This is
+ * exactly `project.service.canManage`; it exists so the UI can hide controls, never to grant access.
+ */
+export function canManageProject(
+  project: ProjectView,
+  caller: { role: WorkspaceRole; userId: string },
+): boolean {
+  if (caller.role === 'OWNER' || caller.role === 'ADMIN') return true;
+  return caller.userId === project.owner.id || caller.userId === project.createdById;
+}
+
+/**
+ * Can a caller assign the project owner to `memberId`? Only OWNER/ADMIN may set a DIFFERENT owner up
+ * front (mirrors `project.service.createProject`); a MEMBER always owns what they create.
+ */
+export function canAssignProjectOwner(role: WorkspaceRole): boolean {
+  return role === 'OWNER' || role === 'ADMIN';
 }
 
 /**

@@ -78,8 +78,18 @@ export class TestApi {
   }
 }
 
-/** Wipe all Phase 2 + Phase 3 tables in FK-safe order (children before parents). */
+/** Wipe all Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 6 tables in FK-safe order (children before parents). */
 export async function resetDb(): Promise<void> {
+  await prisma.decisionHistory.deleteMany(); // actor is onDelete Restrict -> clear before users
+  await prisma.decisionComment.deleteMany(); // author is onDelete Restrict -> clear before users
+  await prisma.decisionParticipant.deleteMany();
+  await prisma.decisionReference.deleteMany();
+  await prisma.decisionAlternative.deleteMany();
+  await prisma.decision.deleteMany(); // creator is onDelete Restrict -> clear before users; links cascade anyway
+  await prisma.taskActivity.deleteMany(); // actor is onDelete Restrict -> clear before users
+  await prisma.taskDependency.deleteMany(); // both endpoints cascade, but clear explicitly for order
+  await prisma.task.deleteMany(); // createdBy/assignee + project refs -> clear before projects & users
+  await prisma.project.deleteMany(); // owner/creator are onDelete Restrict -> clear before users
   await prisma.nexconnWebhookEvent.deleteMany();
   await prisma.conversationParticipant.deleteMany();
   await prisma.workspaceConversation.deleteMany();

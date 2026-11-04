@@ -1,55 +1,60 @@
 @import 'tailwindcss';
 
 /*
- * BuildTogether design token foundation (premium-dark Builder Workspace).
- * These are the single source of truth for the desktop renderer. Impeccable remains the
- * design authority; this codifies Section 9 of the Phase 1 brief: background/surface/border/
- * text colors, a typography scale, spacing/radius scales, elevation, motion, and status colors.
- * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*, rounded-*)
- * are generated directly from them.
+ * BuildTogether design token foundation — **Monochrome Dark** (Vercel-inspired).
+ * Approved visual direction: deep-black backgrounds, charcoal/graphite surfaces, white
+ * primary type, muted-grey secondary type, subtle grey borders, minimal decoration.
+ * No blue/purple/cyan accents. `accent` is the light (near-white) primary-action color;
+ * status colors (success/warning/danger) are the only hues and are reserved for meaning.
+ *
+ * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*,
+ * rounded-*) are generated directly from them. Utility names are kept stable so the whole
+ * renderer re-skins from this single file.
  */
 @theme {
   /* ---- Backgrounds & surfaces ---- */
-  --color-canvas: #0b0d10; /* app background */
-  --color-surface-1: #121519; /* panels, sidebar */
-  --color-surface-2: #191d23; /* cards, inputs */
-  --color-surface-3: #20262e; /* hovered / elevated */
+  --color-canvas: #0a0a0a; /* main app background */
+  --color-sidebar: #090909; /* left rail */
+  --color-surface-1: #111111; /* primary surface: panels, cards, dialogs */
+  --color-surface-2: #171717; /* secondary surface: inputs, pills, rows */
+  --color-surface-3: #1c1c1c; /* elevated / hover / active */
 
   /* ---- Borders ---- */
-  --color-border-subtle: #232830;
-  --color-border-default: #2b323c;
-  --color-border-strong: #3a4150;
+  --color-border-subtle: #1d1d1d; /* hairline dividers */
+  --color-border-default: #262626; /* control outlines, panels */
+  --color-border-strong: #3a3a3a; /* emphasis separators */
 
   /* ---- Text ---- */
-  --color-primary: #e7eaf0;
-  --color-secondary: #9aa3b2;
-  --color-muted: #6b7383;
+  --color-primary: #fafafa; /* headings, body */
+  --color-secondary: #a1a1aa; /* secondary copy */
+  --color-muted: #71717a; /* metadata, icons */
+  --color-disabled: #52525b; /* disabled text / controls */
 
-  /* ---- Accent (brand) ---- */
-  --color-accent: #4c8dff;
-  --color-accent-hover: #3d7bf0;
-  --color-accent-foreground: #0b0d10;
+  /* ---- Accent (primary action = light) ---- */
+  --color-accent: #fafafa;
+  --color-accent-hover: #e4e4e7;
+  --color-accent-foreground: #090909;
 
-  /* ---- Status ---- */
-  --color-success: #3ecf8e;
-  --color-warning: #f5a623;
-  --color-danger: #f2555a;
-  --color-info: #4c8dff;
+  /* ---- Status (the only hues; restrained, meaning-only) ---- */
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #a1a1aa; /* neutral — monochrome interface, no blue */
 
   /* ---- Typography ---- */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
   --text-2xs: 0.6875rem; /* 11px */
-  --text-display: 1.75rem; /* 28px */
-  --text-display--line-height: 2.25rem;
-  --text-display--letter-spacing: -0.01em;
+  --text-display: 1.5rem; /* 24px — restrained display */
+  --text-display--line-height: 2rem;
+  --text-display--letter-spacing: -0.02em;
   --text-display--font-weight: 600;
 
-  /* ---- Radius scale ---- */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* ---- Radius scale (restrained, consistent) ---- */
+  --radius-sm: 0.25rem; /* 4px */
+  --radius-md: 0.375rem; /* 6px — controls */
+  --radius-lg: 0.5rem; /* 8px — panels */
+  --radius-xl: 0.75rem; /* 12px — overlays */
 
   /* ---- Motion ---- */
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -57,22 +62,22 @@
   --duration-base: 180ms;
 }
 
-/* ---- Elevation ---- */
+/* ---- Elevation (surface contrast + hairline, minimal shadow) ---- */
 @utility elevation-1 {
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.32),
+    0 1px 2px rgba(0, 0, 0, 0.4),
     0 0 0 1px var(--color-border-subtle);
 }
 
 @utility elevation-2 {
   box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.4),
+    0 4px 14px rgba(0, 0, 0, 0.5),
     0 0 0 1px var(--color-border-default);
 }
 
 @utility elevation-3 {
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.5),
+    0 16px 40px rgba(0, 0, 0, 0.6),
     0 0 0 1px var(--color-border-default);
 }
 
@@ -89,7 +94,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Keyboard-first, visible focus that matches the accent without harsh outlines. */
+/* Keyboard-first, visible focus in monochrome (white ring, never harsh/colored). */
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -97,10 +102,11 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  color: var(--color-primary);
 }
 
-/* Restrained, premium scrollbars. */
+/* Restrained monochrome scrollbars. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-default) transparent;

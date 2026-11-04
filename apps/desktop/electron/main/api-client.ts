@@ -1,24 +1,58 @@
 import type {
   AcceptInvitationInput,
+  AddTaskDependencyInput,
   ApiResponse,
+  AssignTaskInput,
   AuthSessionView,
   ChangePasswordInput,
+  ChangeTaskStatusInput,
   ChatToken,
   CreateConversationInput,
+  CreateDecisionCommentInput,
+  CreateDecisionInput,
   CreateInvitationInput,
+  CreateProjectInput,
+  CreateTaskInput,
   CreateWorkspaceInput,
   ConversationSummary,
   CreatedInvitation,
+  DecisionCommentView,
+  DecisionDetailView,
+  DecisionHistoryView,
+  DecisionListQuery,
+  DecisionParticipantInput,
+  DecisionView,
   InvitationSummary,
   IssuedSession,
   LoginInput,
   MemberSummary,
+  MyTaskView,
+  ProjectListQuery,
+  ProjectOverview,
+  ProjectView,
   PublicUser,
   RegisterInput,
+  SupersedeDecisionInput,
+  TaskActivityView,
+  TaskDependencies,
+  TaskListQuery,
+  TaskView,
+  UpdateDecisionInput,
   UpdateProfileInput,
+  UpdateProjectInput,
+  UpdateTaskInput,
   UpdateWorkspaceInput,
   WorkspaceRole,
   WorkspaceSummary,
+} from '@buildtogether/shared';
+import {
+  DECISION_SOURCES,
+  DECISION_SORT_FIELDS,
+  DECISION_STATUSES,
+  PROJECT_STATUSES,
+  TASK_PRIORITIES,
+  TASK_SORT_FIELDS,
+  TASK_STATUSES,
 } from '@buildtogether/shared';
 import { resolveApiBaseUrl } from './config';
 import { getTokens, setTokens } from './session-store';
@@ -272,4 +306,293 @@ export const chat = {
       'DELETE',
       `${V1}/workspaces/${workspaceId}/conversations/${conversationId}/members/${userId}`,
     ),
+};
+
+// ---- Projects (Phase 4, workspace-scoped; server-authoritative) ----
+// The renderer supplies a `ProjectListQuery` DTO, but a query string is rebuilt here from a strict
+// allowlist so a compromised renderer cannot smuggle arbitrary params. The server re-validates every
+// value regardless; this is defense-in-depth at the IPC/HTTP boundary.
+
+const SCOPES = ['active', 'archived', 'all'] as const;
+const SORTS = ['createdAt', 'updatedAt', 'name'] as const;
+const DIRS = ['asc', 'desc'] as const;
+
+function buildProjectQuery(query: ProjectListQuery): string {
+  const params = new URLSearchParams();
+  if (query.scope && (SCOPES as readonly string[]).includes(query.scope)) {
+    params.set('scope', query.scope);
+  }
+  if (query.status && (PROJECT_STATUSES as readonly string[]).includes(query.status)) {
+    params.set('status', query.status);
+  }
+  if (query.search && query.search.trim().length > 0) {
+    params.set('search', query.search.trim().slice(0, 120));
+  }
+  if (query.sort && (SORTS as readonly string[]).includes(query.sort)) {
+    params.set('sort', query.sort);
+  }
+  if (query.dir && (DIRS as readonly string[]).includes(query.dir)) {
+    params.set('dir', query.dir);
+  }
+  if (typeof query.limit === 'number' && Number.isInteger(query.limit)) {
+    params.set('limit', String(Math.min(100, Math.max(1, query.limit))));
+  }
+  if (query.cursor && typeof query.cursor === 'string' && query.cursor.length <= 512) {
+    params.set('cursor', query.cursor);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+export const projects = {
+  list: (workspaceId: string, query: ProjectListQuery): Promise<ProjectView[]> =>
+    request<ProjectView[]>(
+      'GET',
+      `${V1}/workspaces/${workspaceId}/projects${buildProjectQuery(query)}`,
+    ),
+  create: (workspaceId: string, input: CreateProjectInput): Promise<ProjectView> =>
+    request<ProjectView>('POST', `${V1}/workspaces/${workspaceId}/projects`, input),
+  getOverview: (workspaceId: string, projectId: string): Promise<ProjectOverview> =>
+    request<ProjectOverview>(
+      'GET',
+      `${V1}/workspaces/${workspaceId}/projects/${projectId}/overview`,
+    ),
+  update: (
+    workspaceId: string,
+    projectId: string,
+    input: UpdateProjectInput,
+  ): Promise<ProjectView> =>
+    request<ProjectView>('PATCH', `${V1}/workspaces/${workspaceId}/projects/${projectId}`, input),
+  archive: (workspaceId: string, projectId: string): Promise<ProjectView> =>
+    request<ProjectView>('POST', `${V1}/workspaces/${workspaceId}/projects/${projectId}/archive`),
+  restore: (workspaceId: string, projectId: string): Promise<ProjectView> =>
+    request<ProjectView>('POST', `${V1}/workspaces/${workspaceId}/projects/${projectId}/restore`),
+};
+
+// ---- Tasks (Phase 5, workspace- + project-scoped; server-authoritative) ----
+// Same defense-in-depth as projects: a task list query DTO is rebuilt here from a strict allowlist so a
+// compromised renderer cannot smuggle arbitrary params. Every id is validated by the IPC layer before
+// reaching this client, and the server re-derives membership / project boundary / legality regardless.
+
+function buildTaskQuery(query: TaskListQuery): string {
+  const params = new URLSearchParams();
+  if (query.status && (TASK_STATUSES as readonly string[]).includes(query.status)) {
+    params.set('status', query.status);
+  }
+  if (query.priority && (TASK_PRIORITIES as readonly string[]).includes(query.priority)) {
+    params.set('priority', query.priority);
+  }
+  if (query.assigneeId && /^[A-Za-z0-9_-]+$/.test(query.assigneeId)) {
+    params.set('assigneeId', query.assigneeId);
+  }
+  if (query.unassigned === true) params.set('unassigned', 'true');
+  if (query.search && query.search.trim().length > 0) {
+    params.set('search', query.search.trim().slice(0, 120));
+  }
+  if (query.sort && (TASK_SORT_FIELDS as readonly string[]).includes(query.sort)) {
+    params.set('sort', query.sort);
+  }
+  if (query.dir === 'asc' || query.dir === 'desc') params.set('dir', query.dir);
+  if (typeof query.limit === 'number' && Number.isInteger(query.limit)) {
+    params.set('limit', String(Math.min(100, Math.max(1, query.limit))));
+  }
+  if (query.cursor && typeof query.cursor === 'string' && query.cursor.length <= 512) {
+    params.set('cursor', query.cursor);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+const ws = (workspaceId: string): string => `${V1}/workspaces/${workspaceId}`;
+
+export const tasks = {
+  list: (workspaceId: string, projectId: string, query: TaskListQuery): Promise<TaskView[]> =>
+    request<TaskView[]>(
+      'GET',
+      `${ws(workspaceId)}/projects/${projectId}/tasks${buildTaskQuery(query)}`,
+    ),
+  create: (workspaceId: string, projectId: string, input: CreateTaskInput): Promise<TaskView> =>
+    request<TaskView>('POST', `${ws(workspaceId)}/projects/${projectId}/tasks`, input),
+  get: (workspaceId: string, taskId: string): Promise<TaskView> =>
+    request<TaskView>('GET', `${ws(workspaceId)}/tasks/${taskId}`),
+  update: (workspaceId: string, taskId: string, input: UpdateTaskInput): Promise<TaskView> =>
+    request<TaskView>('PATCH', `${ws(workspaceId)}/tasks/${taskId}`, input),
+  remove: (workspaceId: string, taskId: string): Promise<null> =>
+    request<null>('DELETE', `${ws(workspaceId)}/tasks/${taskId}`),
+  assign: (workspaceId: string, taskId: string, input: AssignTaskInput): Promise<TaskView> =>
+    request<TaskView>('PATCH', `${ws(workspaceId)}/tasks/${taskId}/assignee`, input),
+  changeStatus: (
+    workspaceId: string,
+    taskId: string,
+    input: ChangeTaskStatusInput,
+  ): Promise<TaskView> =>
+    request<TaskView>('PATCH', `${ws(workspaceId)}/tasks/${taskId}/status`, input),
+  dependencies: (workspaceId: string, taskId: string): Promise<TaskDependencies> =>
+    request<TaskDependencies>('GET', `${ws(workspaceId)}/tasks/${taskId}/dependencies`),
+  addDependency: (
+    workspaceId: string,
+    taskId: string,
+    input: AddTaskDependencyInput,
+  ): Promise<TaskDependencies> =>
+    request<TaskDependencies>('POST', `${ws(workspaceId)}/tasks/${taskId}/dependencies`, input),
+  removeDependency: (
+    workspaceId: string,
+    taskId: string,
+    dependencyId: string,
+  ): Promise<TaskDependencies> =>
+    request<TaskDependencies>(
+      'DELETE',
+      `${ws(workspaceId)}/tasks/${taskId}/dependencies/${dependencyId}`,
+    ),
+  activity: (
+    workspaceId: string,
+    taskId: string,
+    query: { limit?: number; cursor?: string },
+  ): Promise<TaskActivityView[]> => {
+    const params = new URLSearchParams();
+    if (typeof query.limit === 'number' && Number.isInteger(query.limit)) {
+      params.set('limit', String(Math.min(100, Math.max(1, query.limit))));
+    }
+    if (query.cursor && typeof query.cursor === 'string' && query.cursor.length <= 512) {
+      params.set('cursor', query.cursor);
+    }
+    const qs = params.toString();
+    return request<TaskActivityView[]>(
+      'GET',
+      `${ws(workspaceId)}/tasks/${taskId}/activity${qs ? `?${qs}` : ''}`,
+    );
+  },
+  assignedToMe: (workspaceId: string): Promise<MyTaskView[]> =>
+    request<MyTaskView[]>('GET', `${ws(workspaceId)}/tasks/assigned-to-me`),
+};
+
+// ---- Decisions (Phase 6, workspace-scoped; server-authoritative) ----
+// Same defense-in-depth as projects/tasks: the list-query DTO is rebuilt from a strict allowlist so a
+// compromised renderer cannot smuggle arbitrary params. Every id is validated by the IPC layer, and
+// the server re-derives membership / project visibility / lifecycle legality regardless.
+
+function buildDecisionQuery(query: DecisionListQuery): string {
+  const params = new URLSearchParams();
+  if (query.status && (DECISION_STATUSES as readonly string[]).includes(query.status)) {
+    params.set('status', query.status);
+  }
+  if (query.projectId && /^[A-Za-z0-9_-]+$/.test(query.projectId)) {
+    params.set('projectId', query.projectId);
+  }
+  if (query.source && (DECISION_SOURCES as readonly string[]).includes(query.source)) {
+    params.set('source', query.source);
+  }
+  if (query.participantId && /^[A-Za-z0-9_-]+$/.test(query.participantId)) {
+    params.set('participantId', query.participantId);
+  }
+  if (query.search && query.search.trim().length > 0) {
+    params.set('search', query.search.trim().slice(0, 120));
+  }
+  if (query.sort && (DECISION_SORT_FIELDS as readonly string[]).includes(query.sort)) {
+    params.set('sort', query.sort);
+  }
+  if (query.dir === 'asc' || query.dir === 'desc') params.set('dir', query.dir);
+  if (typeof query.limit === 'number' && Number.isInteger(query.limit)) {
+    params.set('limit', String(Math.min(100, Math.max(1, query.limit))));
+  }
+  if (query.cursor && typeof query.cursor === 'string' && query.cursor.length <= 512) {
+    params.set('cursor', query.cursor);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** Feed pagination for history + comments (limit + opaque cursor only). */
+function buildFeedQuery(query: { limit?: number; cursor?: string }): string {
+  const params = new URLSearchParams();
+  if (typeof query.limit === 'number' && Number.isInteger(query.limit)) {
+    params.set('limit', String(Math.min(100, Math.max(1, query.limit))));
+  }
+  if (query.cursor && typeof query.cursor === 'string' && query.cursor.length <= 512) {
+    params.set('cursor', query.cursor);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+export const decisions = {
+  list: (workspaceId: string, query: DecisionListQuery): Promise<DecisionView[]> =>
+    request<DecisionView[]>('GET', `${ws(workspaceId)}/decisions${buildDecisionQuery(query)}`),
+  create: (workspaceId: string, input: CreateDecisionInput): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions`, input),
+  get: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('GET', `${ws(workspaceId)}/decisions/${decisionId}`),
+  update: (
+    workspaceId: string,
+    decisionId: string,
+    input: UpdateDecisionInput,
+  ): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('PATCH', `${ws(workspaceId)}/decisions/${decisionId}`, input),
+  remove: (workspaceId: string, decisionId: string): Promise<null> =>
+    request<null>('DELETE', `${ws(workspaceId)}/decisions/${decisionId}`),
+  finalize: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/finalize`),
+  supersede: (
+    workspaceId: string,
+    decisionId: string,
+    input: SupersedeDecisionInput,
+  ): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>(
+      'POST',
+      `${ws(workspaceId)}/decisions/${decisionId}/supersede`,
+      input,
+    ),
+  archive: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/archive`),
+  restore: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/restore`),
+  addParticipant: (
+    workspaceId: string,
+    decisionId: string,
+    input: DecisionParticipantInput,
+  ): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>(
+      'POST',
+      `${ws(workspaceId)}/decisions/${decisionId}/participants`,
+      input,
+    ),
+  removeParticipant: (
+    workspaceId: string,
+    decisionId: string,
+    userId: string,
+  ): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>(
+      'DELETE',
+      `${ws(workspaceId)}/decisions/${decisionId}/participants/${userId}`,
+    ),
+  history: (
+    workspaceId: string,
+    decisionId: string,
+    query: { limit?: number; cursor?: string },
+  ): Promise<DecisionHistoryView[]> =>
+    request<DecisionHistoryView[]>(
+      'GET',
+      `${ws(workspaceId)}/decisions/${decisionId}/history${buildFeedQuery(query)}`,
+    ),
+  listComments: (
+    workspaceId: string,
+    decisionId: string,
+    query: { limit?: number; cursor?: string },
+  ): Promise<DecisionCommentView[]> =>
+    request<DecisionCommentView[]>(
+      'GET',
+      `${ws(workspaceId)}/decisions/${decisionId}/comments${buildFeedQuery(query)}`,
+    ),
+  addComment: (
+    workspaceId: string,
+    decisionId: string,
+    input: CreateDecisionCommentInput,
+  ): Promise<DecisionCommentView> =>
+    request<DecisionCommentView>(
+      'POST',
+      `${ws(workspaceId)}/decisions/${decisionId}/comments`,
+      input,
+    ),
+  deleteComment: (workspaceId: string, decisionId: string, commentId: string): Promise<null> =>
+    request<null>('DELETE', `${ws(workspaceId)}/decisions/${decisionId}/comments/${commentId}`),
 };

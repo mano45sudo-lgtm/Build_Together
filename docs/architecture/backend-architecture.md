@@ -26,14 +26,14 @@ apps/api/src/
   index.ts       # load+validate env, build app, listen
   app.ts         # express app factory (no listen → testable)
   routes/        # v1.ts mounts the versioned routers
-    auth.routes.ts users.routes.ts workspaces.routes.ts invitations.routes.ts
+    auth.routes.ts users.routes.ts workspaces.routes.ts invitations.routes.ts projects.routes.ts
   controllers/ services/ repositories/
   middlewares/   # auth, workspaceScope, requireWorkspaceRole, validate, requestLog, errorHandler
   lib/           # env.ts (zod-validated), prisma.ts (adapter client singleton), logger.ts,
                  # hashing.ts (Argon2id), tokens.ts, rate-limit.ts, envelope.ts
   errors/        # AppError + domain errors
   test/          # integration harness + setup (real Docker PG)
-  tests/         # *.test.ts (auth, workspaces, security)
+  tests/         # *.test.ts (auth, workspaces, chat, projects, security)
 prisma/          # schema.prisma + migrations
 ```
 
@@ -82,8 +82,26 @@ authentication, workspace-scoped authorization, and integration tests against re
   `pending-for-me`. Tokens are random, stored only as hashes, expiring, single-use, and bound
   to the target email + role; delivery runs through the `EmailService` provider abstraction.
 
+## Phase 4 surface (built — projects)
+
+Versioned, validated, enveloped `/api/v1/workspaces/:workspaceId/projects` — the `projects.routes.ts`
+router is mounted with `mergeParams` **after** `authenticate` + `requireWorkspaceRole('MEMBER')`, so
+every handler already knows the caller is a verified member of the **path** workspace, and `:projectId`
+reads are always scoped to it (cross-workspace id → **404**). Operations: `list` (GET `/`), `create`
+(POST `/`), `get` (GET `/:projectId`), `overview` (GET `/:projectId/overview`), `update`
+(PATCH `/:projectId`), `archive`/`restore` (POST `/:projectId/archive|restore`). Body validation via
+`validate(...)` and query validation via a new `validateQuery(...)` middleware (`req.validatedQuery`);
+the list supports scope/status filters, case-insensitive search, sort + direction, and **keyset cursor
+pagination** (`meta.cursor`). `project.service.ts` enforces the **project permission matrix**
+server-side (OWNER/ADMIN full; a MEMBER manages only projects they own/created; assigning a foreign
+owner is OWNER/ADMIN and must be a current member; **PRIVATE** projects 404 to non-entitled readers —
+existence not leaked), generates/uniquifies `projectKey`+`slug` per workspace (DB unique constraint is
+the race backstop → `409`), and treats `archivedAt` as the sole archive marker. `project.repo.ts` is
+the only layer touching Prisma; `lib/view.ts` maps rows to the `ProjectView` DTO. Covered by 21
+integration tests in `projects.test.ts` against real PG.
+
 ## Not yet built
 
-Messaging, projects/tasks, decisions, AI, analytics, external integrations and payment all
-remain unbuilt (Phase 3+); the API holds none of their routes or tables. There is no password
-reset yet (documented limitation, ADR-0003).
+Tasks, conversation→task, decisions, AI, analytics, external integrations and payment all
+remain unbuilt (Phase 5+); the API holds none of their routes or tables. Projects are built
+(Phase 4), but there is no password reset yet (documented limitation, ADR-0003).

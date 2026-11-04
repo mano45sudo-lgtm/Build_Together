@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Hammer } from 'lucide-react';
 import { AppShell } from './layouts/AppShell';
-import { EmptyState } from './components/ui/EmptyState';
 import { Dialog } from './components/ui/Dialog';
 import { Input } from './components/ui/Input';
 import { Spinner } from './components/ui/Spinner';
@@ -9,7 +8,9 @@ import { NAV_ITEMS, type NavId } from './lib/nav';
 import { AuthProvider, useAuth } from './state/AuthProvider';
 import { WelcomeScreen } from './features/auth/WelcomeScreen';
 import { HomeScreen } from './features/home/HomeScreen';
+import { MyWorkScreen } from './features/mywork/MyWorkScreen';
 import { TeamScreen } from './features/team/TeamScreen';
+import { ProjectsScreen } from './features/projects/ProjectsScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 
 /**
@@ -84,7 +85,14 @@ function Shell() {
   const section = (() => {
     switch (activeId) {
       case 'home':
-        return <HomeScreen onOpenTeam={() => setActiveId('team')} />;
+        return (
+          <HomeScreen
+            onOpenTeam={() => setActiveId('team')}
+            onOpenProjects={() => setActiveId('projects')}
+          />
+        );
+      case 'mywork':
+        return <MyWorkScreen />;
       case 'messages':
         return (
           <Suspense
@@ -100,14 +108,13 @@ function Shell() {
         );
       case 'team':
         return <TeamScreen />;
+      case 'projects':
+        return <ProjectsScreen onOpenMessages={() => setActiveId('messages')} />;
       case 'settings':
         return <SettingsScreen />;
       default:
-        return (
-          <div className="w-full max-w-xl">
-            <EmptyState icon={active.icon} title={active.label} description={active.arrival} />
-          </div>
-        );
+        // Every NavId maps to a real screen above; this is an unreachable defensive fallback.
+        return null;
     }
   })();
 
@@ -132,11 +139,11 @@ function Shell() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         title="Search"
-        description="Search across workspaces, projects and tasks."
+        description="Search across workspaces, projects and conversations."
       >
         <Input placeholder="Search BuildTogether…" disabled />
         <p className="mt-3 text-sm text-secondary">
-          Search results arrive with the project and messaging phases.
+          Global search is a planned feature and is not wired to the API yet.
         </p>
       </Dialog>
 

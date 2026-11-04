@@ -16,7 +16,11 @@ export interface DropdownProps {
   triggerLabel: string;
   items: DropdownItem[];
   align?: 'start' | 'end';
+  /** Which way the menu opens. `up` is used for triggers anchored at the bottom of the viewport. */
+  drop?: 'down' | 'up';
   className?: string;
+  /** Extra classes for the trigger button (e.g. full-width triggers in the sidebar). */
+  triggerClassName?: string;
 }
 
 /** Menu foundation: click to toggle, Escape / outside-click to dismiss, arrow-key navigation. */
@@ -25,7 +29,9 @@ export function Dropdown({
   triggerLabel,
   items,
   align = 'end',
+  drop = 'down',
   className,
+  triggerClassName,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -65,7 +71,10 @@ export function Dropdown({
         aria-expanded={open}
         aria-label={triggerLabel}
         onClick={() => setOpen((prev) => !prev)}
-        className="inline-flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className={cn(
+          'inline-flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+          triggerClassName,
+        )}
       >
         {trigger}
       </button>
@@ -74,8 +83,9 @@ export function Dropdown({
           role="menu"
           onKeyDown={onMenuKeyDown}
           className={cn(
-            'elevation-2 absolute z-50 mt-1 min-w-44 rounded-lg border border-border-default bg-surface-1 p-1',
+            'elevation-2 absolute z-50 min-w-44 rounded-lg border border-border-default bg-surface-1 p-1',
             align === 'end' ? 'right-0' : 'left-0',
+            drop === 'up' ? 'bottom-full mb-1' : 'mt-1',
           )}
         >
           {items.map((item, index) => {

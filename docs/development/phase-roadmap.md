@@ -42,7 +42,7 @@ first-workspace onboarding, workspace switcher, team management (members/roles/i
 workspace settings, profile & security, invitation acceptance. 49 backend + 14 desktop tests pass.
 **No** messaging, projects, tasks, Kanban, decisions, AI, analytics or integrations (Phase 3+).
 
-## Phase 3 — Real-time communication (Nexconn) _(this phase — complete)_
+## Phase 3 — Real-time communication (Nexconn) _(complete)_
 
 Consulted official Nexconn (RongCloud) docs and integrated the **real** SDKs — no invented APIs
 (gate honored). Backend (`apps/api/src/modules/chat`) owns identity mapping (deterministic
@@ -59,17 +59,62 @@ both directions) and real **unread** counts; **presence** and **read receipts** 
 SDK build and were deliberately **not faked**. **No** projects, tasks, Kanban, conversation→task,
 Decision Vault, AI, analytics or integrations (Phase 4+). Closes R2.
 
-## Phase 4 — Conversation → work _(not authorized)_
+## Phase 4 — Projects & project structure _(complete)_
 
-Projects & project channels; select-message → task creation with provenance; task
-assignment; Kanban board (drag + keyboard). Closes R3, R4, R5.
+A workspace-scoped **`Project`** entity (additive, non-destructive migration
+`20261104055810_add_projects`: `projectKey`/`slug` unique **within** a workspace, `status`/
+`visibility` enums, `ownerId`/`createdById` `Restrict` FKs, `archivedAt` as the sole archive marker).
+Versioned, validated, enveloped `/api/v1` endpoints — list (scope/status/search/sort/cursor), create,
+get, overview, update, archive + restore — with **server-side project RBAC** riding existing workspace
+membership (OWNER/ADMIN full; a MEMBER views workspace-visible projects, creates, and manages only the
+projects they own/created; assigning a foreign owner is OWNER/ADMIN and must be a member; **PRIVATE**
+projects 404 to non-entitled readers; cross-workspace id → 404). Shared `projects.ts` contracts + a
+full Electron IPC chain (bridge → sender-/argument-validated handlers → sole authenticated client →
+`window.bt`; tokens never reach the renderer). Impeccable Operate surface: Projects list (All/Active/
+Archived + debounced search, honest loading/empty/no-results/error states, no fabricated data), a
+concise create dialog, and a project workspace with **Overview · Conversations · Settings** (change
+owner; confirm-gated archive/restore; never remove the last owner). **Nexconn project-scoped
+conversations are honestly deferred** — Phase 3 exposes only GROUP/DIRECT, so the Conversations tab is
+a real bridge to Messages and no SDK method is invented. 99 backend + 21 desktop tests pass; all
+quality gates green + live HTTP CRUD verified. **No** tasks, Kanban, conversation→task, Decision Vault,
+Team Pulse, AI, analytics or integrations (Phase 5+). Establishes the projects spine R3/R4/R5 build on.
 
-## Phase 5 — Decisions & insight _(not authorized)_
+## Phase 5 — Task management, ownership & dependencies _(complete)_
+
+> **Roadmap reconciliation.** This phase was earlier sketched as "conversation → work". The
+> **authorized Phase 5 brief** scopes the **execution layer** — tasks with owners, status, priorities,
+> due dates, dependencies and activity inside a project — while **conversation→task selection is
+> deferred**; that is what shipped. Closes R3, R4, R5.
+
+An additive, non-destructive migration `20261104073845_add_task_management` introduces `Task`,
+`TaskDependency` and `TaskActivity` with `TaskStatus`/`TaskPriority`/`TaskActivityType` enums
+(**status kept separate from blocked state**). Versioned, validated, enveloped `/api/v1` task
+endpoints are mounted under `/workspaces/:workspaceId` so existing workspace-role middleware gates
+every route (cross-workspace id → 404): project task list (search/status/priority/assignee filters,
+sort, keyset cursor) + create, single get/patch/delete, focused **assignee** and **status** mutations,
+dependency get/add/delete, paginated **activity**, and a cross-project **assigned-to-me** aggregate.
+Dependencies are validated server-side (same workspace **and** project, no self-edge, no duplicate,
+**cycle DFS rejects circular**), `blocked` is **derived** at read from an unfinished prerequisite and
+never auto-changes workflow status. Assignees must be current workspace members. Multi-record writes
+run in transactions; authorization is re-derived per request. Shared `tasks.ts` contracts + the full
+Electron IPC chain (sender-/argument-validated; tokens never reach the renderer). Impeccable Operate
+surface: a **Tasks** tab inside the project workspace with a compact **list** view and a **Kanban**
+(To Do / In Progress / In Review / Done; move buttons persist with optimistic update + rollback,
+**no drag-and-drop**), a focused **task detail** (inline edit, dependencies, activity), a **quick-create**
+(title + project required, rest optional), and a real **My Work** screen (Upcoming / In Progress /
+Overdue / Completed, all from live API data — no mocks). **Nexconn task realtime is honestly deferred**
+(the existing integration is chat-only with no validated domain-event broadcast); the app stays
+reliably API-backed with no faked realtime. 128 backend + 33 desktop tests pass; all quality gates
+
+- production builds green. **No** conversation→task, Decision Vault, Team Pulse, AI, time tracking,
+  Gantt, subtasks, recurring tasks or integrations (Phase 6+).
+
+## Phase 6 — Decisions & insight _(not authorized)_
 
 Decision Vault (capture with context, retrieve, soft-delete history); Team Pulse activity/
 progress signals. Closes R6, R7.
 
-## Phase 6 — AI layer _(not authorized)_
+## Phase 7 — AI layer _(not authorized)_
 
 Provider-independent server-side abstraction; conversation summaries; action extraction that
 **proposes** tasks/decisions for user confirmation (no silent writes). Closes R8.
@@ -87,10 +132,12 @@ require an explicit decision + ADR.
 
 ## Status tracker
 
-| Phase | State                                   |
-| ----- | --------------------------------------- |
-| 0     | Complete                                |
-| 1     | Complete (desktop foundation)           |
-| 2     | Complete (identity, workspaces & teams) |
-| 3     | Complete (real-time communication)      |
-| 4–6   | Not started / not authorized            |
+| Phase | State                                     |
+| ----- | ----------------------------------------- |
+| 0     | Complete                                  |
+| 1     | Complete (desktop foundation)             |
+| 2     | Complete (identity, workspaces & teams)   |
+| 3     | Complete (real-time communication)        |
+| 4     | Complete (projects & project structure)   |
+| 5     | Complete (task management & dependencies) |
+| 6–7   | Not started / not authorized              |

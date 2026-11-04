@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { authRouter } from './auth.routes.js';
 import { invitationsRouter } from './invitations.routes.js';
+import { projectsRouter } from './projects.routes.js';
+import { decisionsRouter } from './decisions.routes.js';
+import { tasksRouter } from './tasks.routes.js';
 import { usersRouter } from './users.routes.js';
 import { workspacesRouter } from './workspaces.routes.js';
+import { authenticate } from '../middlewares/authenticate.js';
+import { requireWorkspaceRole } from '../middlewares/workspace-scope.js';
 import { chatRouter, chatWebhookRouter } from '../modules/chat/chat.routes.js';
 
 /**
@@ -15,6 +20,36 @@ v1Router.use('/auth', authRouter);
 v1Router.use('/users', usersRouter);
 v1Router.use('/workspaces', workspacesRouter);
 v1Router.use('/invitations', invitationsRouter);
+
+// Phase 4 projects. Workspace-scoped like chat, but the membership + role gate is applied once at the
+// mount point: every `/workspaces/:workspaceId/projects…` request is proven (fresh, from the DB) to be
+// a member of the PATH workspace before any project handler runs; the service then adds the finer
+// OWNER/ADMIN-vs-owner/creator rules. Mounted before chatRouter so its `/conversations…` fallthrough
+// is never reached by a `/projects` path.
+v1Router.use(
+  '/workspaces/:workspaceId/projects',
+  authenticate,
+  requireWorkspaceRole('MEMBER'),
+  projectsRouter,
+);
+
+// Phase 5 tasks. Workspace-scoped exactly like projects: the membership + role gate is applied once at
+// the mount point, so every `/workspaces/:workspaceId/...tasks…` request is a proven member of the PATH
+// workspace before any handler runs; the task service then adds the project visibility/ownership and
+// dependency-legality rules. Mounted after projectsRouter (its `/projects…` fallthrough never reaches a
+// `/projects/:projectId/tasks` path here first) and before chatRouter.
+v1Router.use('/workspaces/:workspaceId', authenticate, requireWorkspaceRole('MEMBER'), tasksRouter);
+
+// Phase 6 Decision Vault. Workspace-scoped exactly like projects/tasks: the mount point proves
+// membership fresh from the DB; the decision service adds project-visibility, management and
+// lifecycle rules. Mounted alongside the other workspace feature routers (distinct /decisions
+// prefix, so no path can collide with /projects…, /tasks… or /conversations…).
+v1Router.use(
+  '/workspaces/:workspaceId/decisions',
+  authenticate,
+  requireWorkspaceRole('MEMBER'),
+  decisionsRouter,
+);
 
 // Phase 3 chat. Mounted AFTER workspacesRouter so its `/:workspaceId/...` sub-paths (chat token,
 // conversations) are matched here without colliding with the workspace/member/invitation routes;

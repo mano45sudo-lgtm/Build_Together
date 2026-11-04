@@ -26,6 +26,8 @@ declare global {
       auth?: AuthContext;
       requestId?: string;
       workspace?: WorkspaceContext;
+      /** Parsed, validated query params attached by `validateQuery` (controllers narrow the type). */
+      validatedQuery?: unknown;
     }
   }
 }
