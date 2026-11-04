@@ -51,3 +51,27 @@ export const authLimiter: RequestHandler = makeAuthLimiter();
 
 /** Looser limiter for invitation creation (spam control): max INVITE_RATE_LIMIT / 15 min per IP. */
 export const inviteLimiter: RequestHandler = makeInviteLimiter();
+
+/**
+ * Chat management limiter (token mint + conversation create/member ops): max CHAT_RATE_LIMIT /
+ * 5 min per IP. Counts ALL requests (not just failures) since these are live, repeatedly-polled
+ * operations. Message transport itself is peer↔provider (Nexconn) and never traverses this limiter.
+ */
+export function makeChatLimiter(limit: number = env.chatRateLimit): RequestHandler {
+  return rateLimit({
+    windowMs: 5 * 60 * 1000,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: {
+      data: null,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many chat requests, please slow down',
+      },
+    },
+  });
+}
+
+/** Default chat limiter instance for mounting. */
+export const chatLimiter: RequestHandler = makeChatLimiter();

@@ -53,7 +53,10 @@ Point `DATABASE_URL` at it, then apply the committed migration and generate the 
 `pnpm --filter @buildtogether/api prisma:migrate` (uses `prisma.config.ts` + the
 `@prisma/adapter-pg` driver) and `prisma:generate`. The identity/workspace schema
 (`User`/`Session`/`Workspace`/`WorkspaceMembership`/`WorkspaceInvitation`) ships as migration
-`20261103175232_init_identity_workspaces`; the integration tests run against this database.
+`20261103175232_init_identity_workspaces`; the Phase 3 communication-metadata models
+(`NexconnUserMapping`/`WorkspaceConversation`/`ConversationParticipant`/`NexconnWebhookEvent`) ship
+as the additive, non-destructive migration `20261104015557_add_nexconn_communication`. The
+integration tests run against this database.
 
 ## Environment variables
 
@@ -69,28 +72,37 @@ Point `DATABASE_URL` at it, then apply the committed migration and generate the 
 
 ### `apps/api/.env` (server-side; secrets live here only)
 
-| Variable                                | Purpose                                                                         | Phase         |
-| --------------------------------------- | ------------------------------------------------------------------------------- | ------------- |
-| `NODE_ENV`                              | `development` locally.                                                          | 0             |
-| `PORT`                                  | HTTP port for the API.                                                          | 0             |
-| `DATABASE_URL`                          | PostgreSQL connection string (Prisma adapter). **Required (Phase 2+).**         | 2             |
-| `CORS_ORIGIN`                           | Allowed client origin(s) (the desktop renderer origin).                         | 0/1           |
-| `SESSION_SECRET`                        | Session value-derivation secret; strong random in prod (fail-closed).           | 2             |
-| `ACCESS_TOKEN_TTL_SECONDS`              | Opaque access-token lifetime (default 900 ≈ 15 min).                            | 2             |
-| `REFRESH_TOKEN_TTL_SECONDS`             | Opaque refresh-token lifetime (default 2592000 ≈ 30 d).                         | 2             |
-| `INVITATION_TTL_SECONDS`                | Invitation expiry (default 604800 ≈ 7 d).                                       | 2             |
-| `AUTH_RATE_LIMIT` / `INVITE_RATE_LIMIT` | Rate-limit ceilings for auth / invitation endpoints.                            | 2             |
-| `PUBLIC_APP_BASE_URL`                   | Base URL for invitation accept links (dev transport).                           | 2             |
-| `SMTP_URL` (optional)                   | Transactional email provider; unset ⇒ clearly-labelled **dev transport**.       | 2             |
-| `NEXCONN_APP_ID` / `NEXCONN_APP_SECRET` | Nexconn server credentials for identity/token minting. **Never in the client.** | Nexconn phase |
-| `AI_PROVIDER` / `AI_API_KEY`            | Provider-independent AI config. **Server-side only.**                           | AI phase      |
+| Variable                                                      | Purpose                                                                                          | Phase    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------- |
+| `NODE_ENV`                                                    | `development` locally.                                                                           | 0        |
+| `PORT`                                                        | HTTP port for the API.                                                                           | 0        |
+| `DATABASE_URL`                                                | PostgreSQL connection string (Prisma adapter). **Required (Phase 2+).**                          | 2        |
+| `CORS_ORIGIN`                                                 | Allowed client origin(s) (the desktop renderer origin).                                          | 0/1      |
+| `SESSION_SECRET`                                              | Session value-derivation secret; strong random in prod (fail-closed).                            | 2        |
+| `ACCESS_TOKEN_TTL_SECONDS`                                    | Opaque access-token lifetime (default 900 ≈ 15 min).                                             | 2        |
+| `REFRESH_TOKEN_TTL_SECONDS`                                   | Opaque refresh-token lifetime (default 2592000 ≈ 30 d).                                          | 2        |
+| `INVITATION_TTL_SECONDS`                                      | Invitation expiry (default 604800 ≈ 7 d).                                                        | 2        |
+| `AUTH_RATE_LIMIT` / `INVITE_RATE_LIMIT`                       | Rate-limit ceilings for auth / invitation endpoints.                                             | 2        |
+| `PUBLIC_APP_BASE_URL`                                         | Base URL for invitation accept links (dev transport).                                            | 2        |
+| `CHAT_RATE_LIMIT`                                             | Ceiling for chat management calls (token mint / conversation create / member ops) per 5 min.     | 3        |
+| `NEXCONN_APP_KEY`                                             | Nexconn **public** app identifier. Echoed to the desktop so Web IMLib can `init`; NOT a secret.  | 3        |
+| `NEXCONN_APP_SECRET`                                          | Nexconn server secret — mints tokens + verifies callbacks. **Server-only, never in the client.** | 3        |
+| `NEXCONN_PRIMARY_API_DOMAIN` / `NEXCONN_SECONDARY_API_DOMAIN` | Optional server-API endpoint overrides (SDK defaults when unset).                                | 3        |
+| `NEXCONN_TOKEN_TTL_SECONDS`                                   | Lifetime of the client token minted for the desktop (default 3600).                              | 3        |
+| `NEXCONN_WEBHOOK_MAX_SKEW_MS`                                 | Accepted clock skew for provider callbacks (replay window, default 300000).                      | 3        |
+| `SMTP_URL` (optional)                                         | Transactional email provider; unset ⇒ clearly-labelled **dev transport**.                        | 2        |
+| `AI_PROVIDER` / `AI_API_KEY`                                  | Provider-independent AI config. **Server-side only.**                                            | AI phase |
+
+> Nexconn needs **no `VITE_` variable**: the client App Key is delivered at runtime inside the
+> short-lived token the backend mints over IPC (see ADR-0004), and the App Secret never leaves the
+> API. Message transport goes renderer→Nexconn directly; conversation metadata + authorization go
+> renderer→main→API.
 
 ### Renderer public variables (`VITE_` prefix is exposed to the bundle)
 
-| Variable              | Purpose                                                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_API_BASE_URL`   | Renderer **fallback** API base, used only outside Electron (tests / browser preview); see the `apps/desktop/.env` table above.    |
-| `VITE_NEXCONN_APP_ID` | Public Nexconn app identifier for the client SDK (NOT a secret; the secret stays in the API). Confirm exact name in Nexconn docs. |
+| Variable            | Purpose                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `VITE_API_BASE_URL` | Renderer **fallback** API base, used only outside Electron (tests / browser preview); see the `apps/desktop/.env` table above. |
 
 > Do not prefix any secret with `VITE_`. `.env`, `.env.local` and `.claude/settings.local.json`
 > are gitignored. Only `.env.example` (placeholders) is committed.

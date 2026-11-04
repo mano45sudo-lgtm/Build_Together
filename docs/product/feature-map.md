@@ -26,7 +26,7 @@ Workspace
 | -------------------------- | --------------------- | --------------------------------- | --------------------------------- | ----- | ----- |
 | Identity / authn & session | Desktop (main) + API  | —                                 | User, Session (Postgres)          | 2     | Built |
 | Workspace & team mgmt      | Desktop + API         | auth                              | Workspace, Membership, Invitation | 2     | Built |
-| Direct & group messaging   | Desktop (Nexconn SDK) | Nexconn token                     | metadata/pointers only            | 3     | —     |
+| Direct & group messaging   | Desktop (Nexconn SDK) | Nexconn token                     | metadata/pointers only            | 3     | Built |
 | Project channels           | Desktop + API         | messaging, projects               | Project↔Nexconn channel link      | 4     | —     |
 | Conversation → task        | Desktop action + API  | messaging                         | Task + sourceRef                  | 4     | —     |
 | Task assignment & Kanban   | Desktop + API         | workspaces, projects              | Task status/assignee              | 4     | —     |
@@ -50,4 +50,7 @@ out until there is a clear product reason (product philosophy: no feature withou
 
 Phase 0–1 built none of the data features above; **Phase 2 delivers the first two rows**
 (identity/auth and workspace/team management) — the isolation base every later row depends on.
+**Phase 3 delivers direct & group messaging** — workspace-level conversations over Nexconn, with
+BuildTogether owning identity mapping + authorization and Nexconn owning the realtime stream. Project
+channels, conversation→task, Kanban, Decision Vault, Team Pulse and AI remain later phases.
 This map guides sequencing for the remaining phases.

@@ -24,6 +24,8 @@ export interface AppShellProps {
   onQuickCreate: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  /** When true the content region fills the frame (no centering/padding) — used by the chat panes. */
+  fullBleed?: boolean;
   children: ReactNode;
 }
 
@@ -38,6 +40,7 @@ export function AppShell({
   onQuickCreate,
   onOpenSettings,
   onSignOut,
+  fullBleed = false,
   children,
 }: AppShellProps) {
   return (
@@ -88,7 +91,13 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-8">
+        <main
+          className={
+            fullBleed
+              ? 'flex min-h-0 flex-1 overflow-hidden'
+              : 'flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-8'
+          }
+        >
           {children}
         </main>
       </div>

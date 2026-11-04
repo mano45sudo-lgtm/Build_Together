@@ -108,3 +108,22 @@ export const refreshSchema = z.object({
 export const updateMemberRoleSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER'], { error: 'Role must be ADMIN or MEMBER' }),
 });
+
+// ---- Phase 3 chat (workspace-scoped conversations over Nexconn — ADR-0004) ----
+// Shape only; the conversation SERVICE enforces the semantic rules (group title required, DIRECT is
+// exactly one peer, every participant must be a workspace member) so no rule can be bypassed here.
+
+export const createConversationSchema = z.object({
+  kind: z.enum(['GROUP', 'DIRECT'], { error: 'Kind must be GROUP or DIRECT' }),
+  title: z.string().trim().max(120, 'Title must be at most 120 characters').optional(),
+  participantUserIds: z
+    .array(z.string().min(1, 'Invalid participant id'))
+    .max(100, 'Too many participants'),
+});
+
+export const addConversationMembersSchema = z.object({
+  userIds: z
+    .array(z.string().min(1, 'Invalid user id'))
+    .min(1, 'Provide at least one user to add')
+    .max(100, 'Too many members'),
+});

@@ -3,6 +3,8 @@ import type { IpcMainInvokeEvent } from 'electron';
 import type {
   AcceptInvitationInput,
   ChangePasswordInput,
+  ConversationKind,
+  CreateConversationInput,
   CreateInvitationInput,
   CreateWorkspaceInput,
   IpcError,
@@ -59,6 +61,35 @@ function optStr(value: unknown, field: string): string | undefined {
   if (typeof value !== 'string')
     throw new ApiRequestError('INVALID_ARGUMENT', `${field} must be a string`);
   return value;
+}
+
+/**
+ * A strict identifier guard for anything interpolated into an API path (workspaceId, conversationId,
+ * userId). Beyond non-empty, it rejects any character outside `[A-Za-z0-9_-]` so a malicious renderer
+ * cannot smuggle `/`, `?`, `#`, or `..` into a URL segment (path traversal / route confusion). Our ids
+ * are cuids, which always pass.
+ */
+function reqId(value: unknown, field: string): string {
+  const s = reqStr(value, field);
+  if (!/^[A-Za-z0-9_-]+$/.test(s)) {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} is not a valid identifier`);
+  }
+  return s;
+}
+
+function reqIdArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new ApiRequestError('INVALID_ARGUMENT', `${field} must be an array`);
+  }
+  return value.map((item) => reqId(item, field));
+}
+
+const KINDS: readonly ConversationKind[] = ['GROUP', 'DIRECT'];
+function reqKind(value: unknown): ConversationKind {
+  if (typeof value !== 'string' || !KINDS.includes(value as ConversationKind)) {
+    throw new ApiRequestError('INVALID_ARGUMENT', 'kind must be GROUP or DIRECT');
+  }
+  return value as ConversationKind;
 }
 
 const ROLES: readonly WorkspaceRole[] = ['OWNER', 'ADMIN', 'MEMBER'];
@@ -314,5 +345,63 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.INVITATIONS_PENDING_FOR_ME, (event) =>
     handle(event, () => api.invitations.pendingForMe()),
+  );
+
+  // ---- chat (Phase 3, app-level; ids strictly validated because they are interpolated into paths) ----
+  ipcMain.handle(IPC.CHAT_GET_TOKEN, (event, workspaceId: unknown) =>
+    handle(event, () => api.chat.getToken(reqId(workspaceId, 'workspaceId'))),
+  );
+
+  ipcMain.handle(IPC.CHAT_LIST_CONVERSATIONS, (event, workspaceId: unknown) =>
+    handle(event, () => api.chat.listConversations(reqId(workspaceId, 'workspaceId'))),
+  );
+
+  ipcMain.handle(IPC.CHAT_CREATE_CONVERSATION, (event, workspaceId: unknown, input: unknown) =>
+    handle(event, async () => {
+      const id = reqId(workspaceId, 'workspaceId');
+      const o = asObject(input);
+      const payload: CreateConversationInput = {
+        kind: reqKind(o['kind']),
+        participantUserIds: reqIdArray(o['participantUserIds'], 'participantUserIds'),
+      };
+      const title = optStr(o['title'], 'title');
+      if (title !== undefined) payload.title = title;
+      return api.chat.createConversation(id, payload);
+    }),
+  );
+
+  ipcMain.handle(
+    IPC.CHAT_GET_CONVERSATION,
+    (event, workspaceId: unknown, conversationId: unknown) =>
+      handle(event, () =>
+        api.chat.getConversation(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(conversationId, 'conversationId'),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.CHAT_ADD_MEMBERS,
+    (event, workspaceId: unknown, conversationId: unknown, userIds: unknown) =>
+      handle(event, () =>
+        api.chat.addMembers(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(conversationId, 'conversationId'),
+          reqIdArray(userIds, 'userIds'),
+        ),
+      ),
+  );
+
+  ipcMain.handle(
+    IPC.CHAT_REMOVE_MEMBER,
+    (event, workspaceId: unknown, conversationId: unknown, userId: unknown) =>
+      handle(event, () =>
+        api.chat.removeMember(
+          reqId(workspaceId, 'workspaceId'),
+          reqId(conversationId, 'conversationId'),
+          reqId(userId, 'userId'),
+        ),
+      ),
   );
 }

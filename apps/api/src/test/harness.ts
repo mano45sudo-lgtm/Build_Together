@@ -78,8 +78,12 @@ export class TestApi {
   }
 }
 
-/** Wipe all Phase 2 tables in FK-safe order (children before parents). */
+/** Wipe all Phase 2 + Phase 3 tables in FK-safe order (children before parents). */
 export async function resetDb(): Promise<void> {
+  await prisma.nexconnWebhookEvent.deleteMany();
+  await prisma.conversationParticipant.deleteMany();
+  await prisma.workspaceConversation.deleteMany();
+  await prisma.nexconnUserMapping.deleteMany();
   await prisma.workspaceInvitation.deleteMany();
   await prisma.workspaceMembership.deleteMany();
   await prisma.session.deleteMany();

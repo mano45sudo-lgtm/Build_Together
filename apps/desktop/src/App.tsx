@@ -6,9 +6,11 @@ import { Dialog } from './components/ui/Dialog';
 import { Input } from './components/ui/Input';
 import { Spinner } from './components/ui/Spinner';
 import { NAV_ITEMS, type NavId } from './lib/nav';
+import { teardown as teardownChat } from './lib/chat-client';
 import { AuthProvider, useAuth } from './state/AuthProvider';
 import { WelcomeScreen } from './features/auth/WelcomeScreen';
 import { HomeScreen } from './features/home/HomeScreen';
+import { MessagesScreen } from './features/messages/MessagesScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 
@@ -46,10 +48,18 @@ function Shell() {
 
   const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
 
+  // Logout / session loss must not leave a live Nexconn session or an in-memory client token behind.
+  const handleSignOut = () => {
+    void teardownChat();
+    void signOut();
+  };
+
   const section = (() => {
     switch (activeId) {
       case 'home':
         return <HomeScreen onOpenTeam={() => setActiveId('team')} />;
+      case 'messages':
+        return <MessagesScreen />;
       case 'team':
         return <TeamScreen />;
       case 'settings':
@@ -74,7 +84,8 @@ function Shell() {
         onOpenSearch={() => setSearchOpen(true)}
         onQuickCreate={() => setQuickCreateOpen(true)}
         onOpenSettings={() => setActiveId('settings')}
-        onSignOut={() => void signOut()}
+        onSignOut={handleSignOut}
+        fullBleed={activeId === 'messages'}
       >
         {section}
       </AppShell>

@@ -42,7 +42,7 @@ export function Sidebar({ activeId, onSelectNav }: SidebarProps) {
       </nav>
 
       <div className="border-t border-border-subtle px-4 py-3 text-2xs text-muted">
-        Phase 2 · identity &amp; teams
+        Phase 3 · identity, teams &amp; messages
       </div>
     </aside>
   );

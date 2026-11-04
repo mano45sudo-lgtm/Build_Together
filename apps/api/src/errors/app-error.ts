@@ -36,3 +36,6 @@ export const conflict = (code: ErrorCode, message: string): AppError =>
 
 export const tooManyRequests = (code: ErrorCode, message: string): AppError =>
   new AppError(429, code, message);
+
+export const serviceUnavailable = (code: ErrorCode, message: string): AppError =>
+  new AppError(503, code, message);

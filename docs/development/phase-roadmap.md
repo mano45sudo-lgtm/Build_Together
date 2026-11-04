@@ -27,7 +27,7 @@ product features** — no auth, workspaces, messaging, tasks, Kanban, decisions,
 > (closes R1) — moves to **Phase 2**. Requirement mappings (`Closes R…`) are unchanged; only
 > the phase **numbers** shift by one. Feature tests begin in the first functional phase.
 
-## Phase 2 — Foundation: workspaces, identity & authorization _(this phase — complete)_
+## Phase 2 — Foundation: workspaces, identity & authorization _(complete)_
 
 Self-managed identity in `apps/api` (Argon2id passwords, server-side opaque hashed sessions with
 rotation + family reuse detection) per [ADR-0003](../decisions/ADR-0003-authentication.md); Prisma
@@ -42,11 +42,22 @@ first-workspace onboarding, workspace switcher, team management (members/roles/i
 workspace settings, profile & security, invitation acceptance. 49 backend + 14 desktop tests pass.
 **No** messaging, projects, tasks, Kanban, decisions, AI, analytics or integrations (Phase 3+).
 
-## Phase 3 — Real-time communication (Nexconn) _(not authorized)_
+## Phase 3 — Real-time communication (Nexconn) _(this phase — complete)_
 
-Consult official Nexconn docs; identity mapping + backend token minting; direct & group
-messaging UI via the SDK; message events, presence, read receipts; reconnection handling.
-Closes R2. (Gate: Nexconn capabilities confirmed from docs — no invented APIs.)
+Consulted official Nexconn (RongCloud) docs and integrated the **real** SDKs — no invented APIs
+(gate honored). Backend (`apps/api/src/modules/chat`) owns identity mapping (deterministic
+`bt-<userId>` external ids), short-lived user-scoped token minting, workspace-scoped conversation
+metadata + server-side authorization (participant/creator, cross-workspace → 404), and signature-
+verified idempotent webhooks; it stores **no message bodies** (Nexconn owns the stream). Two
+conversation kinds — workspace-level **GROUP** and **DIRECT** — mirror to the provider. The Electron
+**main** process mints the client token over validated IPC (App Secret never leaves the API); the
+sandboxed **renderer** talks to Nexconn directly via Web IMLib for send/history/typing/unread, with an
+Impeccable Operate Messages surface (list · view · details · new) added as one nav entry. 78 backend +
+20 desktop tests pass (provider mocked; workspace isolation + authz proven; live provider is
+credential-gated and **not** claimed). **Honest limitation:** the Web SDK surfaces **typing** (wired
+both directions) and real **unread** counts; **presence** and **read receipts** are not exposed by this
+SDK build and were deliberately **not faked**. **No** projects, tasks, Kanban, conversation→task,
+Decision Vault, AI, analytics or integrations (Phase 4+). Closes R2.
 
 ## Phase 4 — Conversation → work _(not authorized)_
 
@@ -81,4 +92,5 @@ require an explicit decision + ADR.
 | 0     | Complete                                |
 | 1     | Complete (desktop foundation)           |
 | 2     | Complete (identity, workspaces & teams) |
-| 3–6   | Not started / not authorized            |
+| 3     | Complete (real-time communication)      |
+| 4–6   | Not started / not authorized            |

@@ -56,3 +56,6 @@ export * from './desktop';
 
 // ---- Phase 2 domain contracts (identity, workspaces, membership, invitations) ----
 export * from './domain';
+
+// ---- Phase 3 communication contracts (workspace-scoped chat over Nexconn) ----
+export * from './chat';

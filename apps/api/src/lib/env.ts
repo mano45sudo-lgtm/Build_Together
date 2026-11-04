@@ -33,10 +33,18 @@ export interface Env {
   invitationTtlSeconds: number;
   authRateLimit: number;
   inviteRateLimit: number;
+  chatRateLimit: number;
   publicAppBaseUrl: string;
-  // Forward-looking (validated when their phase lands):
-  nexconnAppId?: string | undefined;
+  // Nexconn (ADR-0004). Optional in dev/test so the rest of the API boots without chat
+  // credentials; the chat module fails closed when they are absent. App Secret is server-only;
+  // App Key is a public client identifier (also used for `init` on the client). Callback signature
+  // = SHA1(AppSecret + nonce + timestamp) (verified: docs.rongcloud.io auth-callback).
+  nexconnAppKey?: string | undefined;
   nexconnAppSecret?: string | undefined;
+  nexconnPrimaryApiDomain?: string | undefined;
+  nexconnSecondaryApiDomain?: string | undefined;
+  nexconnTokenTtlSeconds: number;
+  nexconnWebhookMaxSkewMs: number;
 }
 
 function requireEnv(key: string): string {
@@ -59,9 +67,14 @@ export function loadEnv(): Env {
     invitationTtlSeconds: int('INVITATION_TTL_SECONDS', 604800),
     authRateLimit: int('AUTH_RATE_LIMIT', 10),
     inviteRateLimit: int('INVITE_RATE_LIMIT', 30),
+    chatRateLimit: int('CHAT_RATE_LIMIT', 60),
     publicAppBaseUrl: str('PUBLIC_APP_BASE_URL', 'http://localhost:5173') as string,
-    nexconnAppId: str('NEXCONN_APP_ID'),
+    nexconnAppKey: str('NEXCONN_APP_KEY'),
     nexconnAppSecret: str('NEXCONN_APP_SECRET'),
+    nexconnPrimaryApiDomain: str('NEXCONN_PRIMARY_API_DOMAIN'),
+    nexconnSecondaryApiDomain: str('NEXCONN_SECONDARY_API_DOMAIN'),
+    nexconnTokenTtlSeconds: int('NEXCONN_TOKEN_TTL_SECONDS', 3600),
+    nexconnWebhookMaxSkewMs: int('NEXCONN_WEBHOOK_MAX_SKEW_MS', 300000),
   };
 
   // Fail closed in production if an insecure default is still in place. Never log values.

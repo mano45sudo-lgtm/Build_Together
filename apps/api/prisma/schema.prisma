@@ -33,6 +33,21 @@ enum InvitationStatus {
   REVOKED
 }
 
+/// Conversation shapes (Phase 3). GROUP maps to a Nexconn group channel (workspace-level group
+/// conversation or a multi-person group DM); DIRECT is a 1:1 DM between two workspace members whose
+/// Nexconn PRIVATE target is derived from the participants' external ids.
+enum ConversationKind {
+  GROUP
+  DIRECT
+}
+
+/// Lifecycle of a verified provider callback we have recorded (idempotent audit). Not message state.
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+}
+
 // ---- Identity ----
 
 model User {
@@ -49,6 +64,9 @@ model User {
   sessions          Session[]
   workspacesCreated Workspace[]           @relation("WorkspaceCreator")
   invitationsSent   WorkspaceInvitation[] @relation("InvitationInviter")
+  nexconnMapping    NexconnUserMapping?
+  conversationsCreated WorkspaceConversation[]  @relation("ConversationCreator")
+  conversationParts    ConversationParticipant[]
 
   @@index([status])
 }
@@ -88,8 +106,9 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  memberships WorkspaceMembership[]
-  invitations WorkspaceInvitation[]
+  memberships  WorkspaceMembership[]
+  invitations  WorkspaceInvitation[]
+  conversations WorkspaceConversation[]
 
   @@index([createdById])
 }
@@ -136,4 +155,72 @@ model WorkspaceInvitation {
   @@index([workspaceId, status])
   @@index([email, status])
   @@index([expiresAt])
+}
+
+// ---- Real-time communication (Phase 3 — application metadata only, no message bodies) ----
+
+/// Maps a BuildTogether user (single source of truth) to a stable Nexconn identity. `externalId`
+/// is derived deterministically from the BT userId (never the email, never user-chosen), so a
+/// user can never impersonate another Nexconn identity, and the mapping is unique per user.
+model NexconnUserMapping {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalId String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([externalId])
+}
+
+/// A workspace-scoped conversation. BuildTogether owns membership + authorization; the message
+/// stream lives entirely in Nexconn. GROUP conversations own a Nexconn group channel
+/// (`providerChannelId`, opaque + unique); DIRECT conversations derive their Nexconn PRIVATE target
+/// from the two participants' external ids and therefore have no channel id.
+model WorkspaceConversation {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind              ConversationKind
+  title             String?
+  providerChannelId String?          @unique
+  createdById       String
+  createdBy         User             @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  isArchived        Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  participants ConversationParticipant[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, kind])
+}
+
+/// Conversation membership (metadata + the server-side authorization gate). Unique per
+/// (conversation, user). Removed participants lose conversation access; token minting is gated on it.
+model ConversationParticipant {
+  id             String                @id @default(cuid())
+  conversationId String
+  conversation   WorkspaceConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime              @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+/// Idempotent record of a verified provider callback, for audit + membership reconciliation. NEVER
+/// stores message bodies; `payload` is a bounded, already-verified audit reference. `providerEventId`
+/// de-duplicates redelivery (unique constraint) and `receivedAt`/`processedAt` support replay windows.
+model NexconnWebhookEvent {
+  id              String        @id @default(cuid())
+  providerEventId String        @unique
+  type            String
+  status          WebhookStatus @default(RECEIVED)
+  payload         Json
+  receivedAt      DateTime      @default(now())
+  processedAt     DateTime?
+
+  @@index([type, receivedAt])
 }

@@ -7,6 +7,9 @@ allowBuilds:
   prisma: true
   electron: true
   electron-winstaller: true
+  # Nexconn Server SDK is distributed via git and has a `prepare` build step
+  # (TypeScript -> JS). Allow-build pinned to the exact resolved tarball commit.
+  '@nexconn/server-sdk@https://codeload.github.com/NexconnAI-Dev/nexconn-server-sdk-node/tar.gz/06acc1a48583761e93247c55d5c60d3d46338b0e': true
 minimumReleaseAgeExclude:
   - '@tailwindcss/node@4.3.4'
   - '@tailwindcss/oxide-android-arm64@4.3.4'

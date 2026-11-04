@@ -70,5 +70,44 @@ Feature tests began with the first functional phase. **49 backend** + **14 deskt
 - **E2E (Playwright):** deferred — a full Electron runtime smoke is manual/CI (see
   `environment-setup.md`); no browser E2E journey is claimed as passing.
 
+## Phase 3 state (real-time communication — implemented, mocked-verified)
+
+**78 backend** + **20 desktop** tests pass (Phase 2's 49 + 14 remain green; chat adds 29 backend
+across `chat.test.ts` + `webhook.test.ts` and 6 desktop in `MessagesScreen.test.tsx`). All chat tests
+use the real API + PostgreSQL with the Nexconn **provider replaced by an in-memory double** — they
+prove BuildTogether's OWN guarantees, never that the live provider works (that is credential-gated and
+separate; see below).
+
+- **Backend — identity & token (`chat.test.ts`):** a token is minted only for a verified workspace
+  member, is user-scoped and short-lived, echoes the public App Key but **never** the App Secret, and
+  persists a deterministic `bt-<userId>` external-id mapping; a client cannot mint for another user
+  (identity comes from auth, not input); a non-member gets 403; when the provider reports unavailable
+  the endpoint **fails closed 503** (no fabricated token).
+- **Backend — conversations & authorization (`chat.test.ts`):** GROUP create mirrors to the provider
+  (create-group + join-member) and requires a title; DIRECT takes exactly one peer; adding a
+  non-workspace-member is refused **before** any provider call and persists nothing; the list returns
+  only the caller's conversations (a same-workspace co-worker cannot see a DM they're not in); a
+  non-participant reading a conversation is 403; **cross-workspace id manipulation is 404**
+  (non-enumerable); adding members to a DIRECT is refused; removal is creator-only (self-leave always
+  allowed) and a removed member is immediately cut off; provider `bad_request` maps to a sanitized 400
+  and `unavailable` to 503 with **no row persisted**.
+- **Backend — webhook (`webhook.test.ts`):** the five verification gates are exercised over real HTTP —
+  configured (503 fail-closed), signed (missing headers → 401), fresh (stale timestamp outside the
+  replay window → 401 even when correctly signed), valid signature (tampered → 401, nothing recorded),
+  and idempotent (redelivery recorded exactly once); a processed event is audited **without** any
+  message body. Plus chat rate-limiting (all calls counted → 429) and the pure id helpers.
+- **Desktop renderer (`MessagesScreen.test.tsx`, jsdom):** the Web-IMLib transport is mocked (it cannot
+  run in jsdom). Tests confirm the screen renders only server-authorized conversations, loads + merges
+  history, sends through the transport and shows the ack optimistically **without duplicating** a live
+  echo, shows a real typing indicator mapped to a participant name, and — critically — when the
+  provider is unavailable it surfaces an honest error and **fabricates no messages** (composer
+  disabled, no history fetched).
+- **Not yet run (honestly):** live two-account send/receive against the real Nexconn edge, and a
+  packaged Electron production smoke of the Messages surface, both require Nexconn test credentials and
+  are **pending** — never claimed as passing from mocks (§11/§12/§16). IPC argument-boundary validation
+  (`reqId`/`reqKind`/`reqIdArray` in the main process) is enforced by the trusted main process and
+  covered by `tsc` + the electron-vite build, not by jsdom (main/preload are out of the renderer test
+  scope by configuration).
+
 Nothing untested is implied as covered; the phase report states actual counts and names what
 was not run.

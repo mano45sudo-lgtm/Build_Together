@@ -1,5 +1,7 @@
 import type {
   AuthSessionView,
+  ConversationKind,
+  ConversationSummary,
   InvitationStatus,
   InvitationSummary,
   MemberSummary,
@@ -113,5 +115,44 @@ export function buildSessionView(
   return {
     user: toPublicUser(user),
     workspaces: memberships.map(toWorkspaceSummary),
+  };
+}
+
+// ---- Phase 3 chat projections (ADR-0004). Receiving row shapes live here so date + null handling
+// stays in one place; the chat repository returns these shapes and never touches the wire format. ----
+
+/** A conversation participant row (user + its Nexconn mapping, already joined). */
+export interface ConversationParticipantRow {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  externalId: string;
+}
+
+/** A conversation row joined with its participants (repository → projection input). */
+export interface ConversationRow {
+  id: string;
+  workspaceId: string;
+  kind: ConversationKind;
+  title: string | null;
+  providerChannelId: string | null;
+  createdAt: Date;
+  participants: ConversationParticipantRow[];
+}
+
+export function toConversationSummary(c: ConversationRow): ConversationSummary {
+  return {
+    id: c.id,
+    kind: c.kind,
+    providerChannelId: c.providerChannelId,
+    title: c.title,
+    workspaceId: c.workspaceId,
+    participants: c.participants.map((p) => ({
+      userId: p.userId,
+      name: p.name,
+      avatarUrl: p.avatarUrl,
+      externalId: p.externalId,
+    })),
+    createdAt: iso(c.createdAt),
   };
 }

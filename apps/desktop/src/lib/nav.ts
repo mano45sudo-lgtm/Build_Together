@@ -3,6 +3,7 @@ import {
   Folder,
   Home,
   ListChecks,
+  MessageSquare,
   Plug,
   Settings,
   Users,
@@ -10,7 +11,14 @@ import {
 } from 'lucide-react';
 
 export type NavId =
-  'home' | 'my-work' | 'projects' | 'connected-apps' | 'decision-vault' | 'team' | 'settings';
+  | 'home'
+  | 'messages'
+  | 'my-work'
+  | 'projects'
+  | 'connected-apps'
+  | 'decision-vault'
+  | 'team'
+  | 'settings';
 
 export interface NavItem {
   id: NavId;
@@ -30,6 +38,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Home',
     icon: Home,
     arrival: 'Workspace overview arrives in a later phase.',
+  },
+  {
+    id: 'messages',
+    label: 'Messages',
+    icon: MessageSquare,
+    arrival: 'Realtime conversation for this workspace.',
   },
   {
     id: 'my-work',

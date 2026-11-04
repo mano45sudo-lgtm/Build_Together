@@ -26,6 +26,7 @@ import type {
   WorkspaceRole,
   WorkspaceSummary,
 } from './domain';
+import type { ChatToken, ConversationSummary, CreateConversationInput } from './chat';
 
 /** Non-secret runtime configuration the main process resolves and hands to the renderer. */
 export interface DesktopConfig {
@@ -94,6 +95,34 @@ export interface DesktopBridge {
     accept(input: AcceptInvitationInput): Promise<IpcOutcome<WorkspaceSummary>>;
     pendingForMe(): Promise<IpcOutcome<InvitationSummary[]>>;
   };
+  /**
+   * Phase 3 chat APP-LEVEL operations only (workspace-scoped; the trusted main process attaches the BT
+   * session and the server authorizes). Realtime MESSAGE transport is NOT here — the renderer drives
+   * Nexconn directly via Web IMLib using the short-lived per-user token returned by `getToken`
+   * (ADR-0004). BT session tokens never cross this boundary; only the ephemeral Nexconn client token does.
+   */
+  chat: {
+    getToken(workspaceId: string): Promise<IpcOutcome<ChatToken>>;
+    listConversations(workspaceId: string): Promise<IpcOutcome<ConversationSummary[]>>;
+    createConversation(
+      workspaceId: string,
+      input: CreateConversationInput,
+    ): Promise<IpcOutcome<ConversationSummary>>;
+    getConversation(
+      workspaceId: string,
+      conversationId: string,
+    ): Promise<IpcOutcome<ConversationSummary>>;
+    addMembers(
+      workspaceId: string,
+      conversationId: string,
+      userIds: string[],
+    ): Promise<IpcOutcome<ConversationSummary>>;
+    removeMember(
+      workspaceId: string,
+      conversationId: string,
+      userId: string,
+    ): Promise<IpcOutcome<null>>;
+  };
 }
 
 /** IPC channel names. Single source of truth so main and preload cannot drift. */
@@ -128,6 +157,13 @@ export const IPC = {
   INVITATIONS_REVOKE: 'invitations:revoke',
   INVITATIONS_ACCEPT: 'invitations:accept',
   INVITATIONS_PENDING_FOR_ME: 'invitations:pending-for-me',
+  // Chat (Phase 3 — app-level, workspace-scoped; provider message transport stays in the renderer)
+  CHAT_GET_TOKEN: 'chat:get-token',
+  CHAT_LIST_CONVERSATIONS: 'chat:list-conversations',
+  CHAT_CREATE_CONVERSATION: 'chat:create-conversation',
+  CHAT_GET_CONVERSATION: 'chat:get-conversation',
+  CHAT_ADD_MEMBERS: 'chat:add-members',
+  CHAT_REMOVE_MEMBER: 'chat:remove-member',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

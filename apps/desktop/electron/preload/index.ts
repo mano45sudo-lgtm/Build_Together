@@ -60,6 +60,19 @@ const bridge: DesktopBridge = {
     accept: (input) => invoke(IPC.INVITATIONS_ACCEPT, input),
     pendingForMe: () => invoke(IPC.INVITATIONS_PENDING_FOR_ME),
   },
+
+  chat: {
+    getToken: (workspaceId) => invoke(IPC.CHAT_GET_TOKEN, workspaceId),
+    listConversations: (workspaceId) => invoke(IPC.CHAT_LIST_CONVERSATIONS, workspaceId),
+    createConversation: (workspaceId, input) =>
+      invoke(IPC.CHAT_CREATE_CONVERSATION, workspaceId, input),
+    getConversation: (workspaceId, conversationId) =>
+      invoke(IPC.CHAT_GET_CONVERSATION, workspaceId, conversationId),
+    addMembers: (workspaceId, conversationId, userIds) =>
+      invoke(IPC.CHAT_ADD_MEMBERS, workspaceId, conversationId, userIds),
+    removeMember: (workspaceId, conversationId, userId) =>
+      invoke(IPC.CHAT_REMOVE_MEMBER, workspaceId, conversationId, userId),
+  },
 };
 
 contextBridge.exposeInMainWorld('bt', bridge);

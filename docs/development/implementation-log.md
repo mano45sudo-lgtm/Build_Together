@@ -5,6 +5,86 @@ completion report; this log is the durable summary.
 
 ---
 
+## Phase 3 — Real-Time Communication (Nexconn)
+
+**Date:** 2026-11-04 · **Status:** Complete & mocked-verified (see acceptance in the phase report) ·
+**Scope:** functional, secure, workspace-scoped real-time messaging over the **real** Nexconn
+(RongCloud) SDK. **No** projects/tasks/Kanban/Decision Vault/AI/connected-apps (Phase 4+ untouched).
+
+### Work completed
+
+- **Verified the real SDK surface** from official docs before coding (no invented APIs): server SDK
+  `@nexconn/server-sdk` (apps/api only) + client `@rongcloud/imlib-next` / `@rongcloud/engine`
+  (desktop renderer). Architecture decision recorded in `ADR-0004` + `docs/architecture/nexconn-integration.md`.
+- **Data layer** — additive, non-destructive migration `20261104015557_add_nexconn_communication`
+  adding `NexconnUserMapping` / `WorkspaceConversation` / `ConversationParticipant` /
+  `NexconnWebhookEvent` (FKs, unique constraints, indexes). **Message bodies are never stored** —
+  Nexconn owns the stream; Postgres keeps only identity mapping, conversation metadata and a bounded
+  callback audit for workspace isolation.
+- **Backend chat module** (`apps/api/src/modules/chat`) — provider abstraction (`ChatProvider` +
+  Nexconn impl + in-memory test double), token service (deterministic `bt-<userId>` external ids,
+  short-lived user-scoped tokens, App Secret never returned), conversation service (GROUP + DIRECT,
+  provider create/join/leave mirroring), webhook service (RongCloud `SHA1(secret+nonce+timestamp)`
+  verification, replay window, constant-time compare, idempotent record). Versioned `/api/v1` routes
+  under `/workspaces/:workspaceId`, `authenticate` + `requireWorkspaceRole('MEMBER')` on every route,
+  Zod at the edge, `chatLimiter`, centralized provider-error mapping, unauthenticated `/webhooks/nexconn`.
+- **Electron** — main mints the client token + does conversation CRUD over validated, sender-checked
+  IPC (`reqId` guards path-interpolated ids; `IpcOutcome` envelope); the trusted main never forwards the
+  App Secret to the renderer. The sandboxed renderer drives Web IMLib **directly** for
+  send/history/typing/unread/live-events (`lib/chat-client.ts` — the ONLY module importing the client SDK).
+- **Renderer (Impeccable, Operate mode)** — one new nav entry (**Messages**) opening a full-bleed,
+  workspace-scoped two-pane surface: `ConversationList` · `ConversationView` (header, paged history,
+  live stream, day dividers, composer, typing) · `ConversationDetailsDialog` (participants + membership)
+  · `NewConversationDialog` (DIRECT/GROUP). `useChatRuntime` owns one connection + subscription per
+  workspace; workspace switch remounts the scope; logout tears down the Nexconn session. Honest
+  loading/empty/error states; **no fabricated conversations, messages, presence or receipts**.
+
+### Deviations / decisions under fire
+
+- **Presence & read receipts deliberately omitted** — this Web SDK build does not surface them in a
+  dependable way, and §10 forbids misleading status, so they are NOT faked; only **typing**
+  (`Events.TYPING_STATUS`, both directions) and real **unread** counts are shown.
+- Live conversation routing standardized to `${ConversationType}:${targetId}` so live / history / send
+  agree on one key (DIRECT peer resolved by `externalId !== myExternalId`).
+- Unconfigured provider **fails closed** (503 → honest "Chat is currently unavailable"), never a mock
+  thread; list metadata still loads through the API.
+- Desktop renderer tests mock the transport (Web IMLib cannot run in jsdom) and set
+  `asyncUtilTimeout: 8000` — the default 1s was flaky purely from CPU contention when the full monorepo
+  suite runs the API integration suite alongside (a scheduling artifact, not a logic bug).
+
+### Validation executed & results (all run)
+
+| Check      | Command                 | Result                                                 |
+| ---------- | ----------------------- | ------------------------------------------------------ |
+| Migrations | `prisma migrate status` | ✅ 2 migrations; DB schema up to date                  |
+| Typecheck  | `pnpm -r typecheck`     | ✅ shared + api + desktop                              |
+| Lint       | `pnpm lint`             | ✅ 0 problems                                          |
+| Format     | `pnpm format:check`     | ✅ all Prettier-clean                                  |
+| Tests      | `pnpm -r test`          | ✅ **78** backend (6 files) + **20** desktop (3 files) |
+| Build      | `pnpm -r build`         | ✅ api tsc→dist; desktop main/preload/renderer bundle  |
+
+Phase 2 remains intact (all 49 + 14 prior tests still pass, now subsumed in the totals).
+
+### Known issues / remaining work
+
+- **Live two-account Nexconn verification is PENDING** — needs the App Key / App Secret + a second
+  test account. Mocked tests prove BuildTogether's logic but are **never** claimed as proof the live
+  provider works (§11/§12/§16).
+- Renderer production bundle is ~2 MB (the Web IMLib SDK); a code-split/`manualChunks` pass is a
+  reasonable future optimization, not a correctness issue.
+- `@rongcloud/engine` emits a benign `path` externalization warning during the browser build (the SDK
+  guards it); bundle builds and runs.
+
+### Out-of-scope confirmation (Phase 3 exclusions honored)
+
+No projects, project channels, tasks, Kanban, conversation→task, Decision Vault, Team Pulse, AI,
+connected apps (GitHub/Figma/Notion), analytics, payments or marketing were started. **No Phase 4
+features begun.**
+
+**Phase 3 status: COMPLETE (mocked-verified); live-provider verification pending credentials.**
+
+---
+
 ## Phase 2 — Identity, Workspaces & Team Management
 
 **Date:** 2026-11-03 · **Status:** Complete (see acceptance in the phase report) · **Scope:**

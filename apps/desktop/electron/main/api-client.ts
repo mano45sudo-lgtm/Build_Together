@@ -3,8 +3,11 @@ import type {
   ApiResponse,
   AuthSessionView,
   ChangePasswordInput,
+  ChatToken,
+  CreateConversationInput,
   CreateInvitationInput,
   CreateWorkspaceInput,
+  ConversationSummary,
   CreatedInvitation,
   InvitationSummary,
   IssuedSession,
@@ -232,4 +235,41 @@ export const invitations = {
     request<WorkspaceSummary>('POST', `${V1}/invitations/accept`, input),
   pendingForMe: (): Promise<InvitationSummary[]> =>
     request<InvitationSummary[]>('GET', `${V1}/invitations/pending`),
+};
+
+// ---- Chat (Phase 3, app-level only) ----
+// Conversation metadata + the ephemeral Nexconn client token. The token is a PER-USER, SHORT-LIVED
+// provider credential (NOT the BT session) and is safe to hand to the renderer so Web IMLib can
+// connect; BT access/refresh tokens still never leave this process (ADR-0003/ADR-0004).
+
+export const chat = {
+  getToken: (workspaceId: string): Promise<ChatToken> =>
+    request<ChatToken>('GET', `${V1}/workspaces/${workspaceId}/chat/token`),
+  listConversations: (workspaceId: string): Promise<ConversationSummary[]> =>
+    request<ConversationSummary[]>('GET', `${V1}/workspaces/${workspaceId}/conversations`),
+  createConversation: (
+    workspaceId: string,
+    input: CreateConversationInput,
+  ): Promise<ConversationSummary> =>
+    request<ConversationSummary>('POST', `${V1}/workspaces/${workspaceId}/conversations`, input),
+  getConversation: (workspaceId: string, conversationId: string): Promise<ConversationSummary> =>
+    request<ConversationSummary>(
+      'GET',
+      `${V1}/workspaces/${workspaceId}/conversations/${conversationId}`,
+    ),
+  addMembers: (
+    workspaceId: string,
+    conversationId: string,
+    userIds: string[],
+  ): Promise<ConversationSummary> =>
+    request<ConversationSummary>(
+      'POST',
+      `${V1}/workspaces/${workspaceId}/conversations/${conversationId}/members`,
+      { userIds },
+    ),
+  removeMember: (workspaceId: string, conversationId: string, userId: string): Promise<null> =>
+    request<null>(
+      'DELETE',
+      `${V1}/workspaces/${workspaceId}/conversations/${conversationId}/members/${userId}`,
+    ),
 };

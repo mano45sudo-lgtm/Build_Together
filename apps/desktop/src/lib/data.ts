@@ -1,6 +1,7 @@
 import type {
   AcceptInvitationInput,
   ChangePasswordInput,
+  CreateConversationInput,
   CreateInvitationInput,
   CreateWorkspaceInput,
   UpdateProfileInput,
@@ -44,5 +45,20 @@ export const api = {
   auth: {
     changePassword: (input: ChangePasswordInput) =>
       unwrap(requireBridge().auth.changePassword(input)),
+  },
+  // Chat APP-LEVEL operations (workspace-scoped metadata + the ephemeral Nexconn client token). The
+  // realtime message transport is NOT here — see `chat-client.ts`, which drives Web IMLib directly.
+  chat: {
+    getToken: (workspaceId: string) => unwrap(requireBridge().chat.getToken(workspaceId)),
+    listConversations: (workspaceId: string) =>
+      unwrap(requireBridge().chat.listConversations(workspaceId)),
+    createConversation: (workspaceId: string, input: CreateConversationInput) =>
+      unwrap(requireBridge().chat.createConversation(workspaceId, input)),
+    getConversation: (workspaceId: string, conversationId: string) =>
+      unwrap(requireBridge().chat.getConversation(workspaceId, conversationId)),
+    addMembers: (workspaceId: string, conversationId: string, userIds: string[]) =>
+      unwrap(requireBridge().chat.addMembers(workspaceId, conversationId, userIds)),
+    removeMember: (workspaceId: string, conversationId: string, userId: string) =>
+      unwrap(requireBridge().chat.removeMember(workspaceId, conversationId, userId)),
   },
 };
