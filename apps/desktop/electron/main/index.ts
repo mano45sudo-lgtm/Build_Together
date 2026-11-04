@@ -5,6 +5,7 @@ import { registerIpc } from './ipc';
 import { registerContentSecurityPolicy, registerPermissionGuards } from './security';
 import { buildApplicationMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
+import { loadSession } from './session-store';
 
 // A single-instance desktop app: refocus the existing window instead of opening a second one.
 const gotLock = app.requestSingleInstanceLock();
@@ -22,10 +23,12 @@ if (!gotLock) {
   // Privileged scheme registration must happen before app ready.
   registerAppScheme();
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     handleAppScheme(join(__dirname, '../renderer'));
     registerContentSecurityPolicy();
     registerPermissionGuards();
+    // Restore any encrypted session BEFORE the renderer boots so a signed-in user is recognized.
+    await loadSession();
     registerIpc();
     Menu.setApplicationMenu(buildApplicationMenu());
     createWindow();

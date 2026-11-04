@@ -13,7 +13,9 @@ apps/desktop/
       index.ts    # bootstrap: single-instance lock → scheme → ready → handlers → window
       config.ts   # environment-aware API base + trusted renderer origin
       security.ts # CSP, permission deny-all, navigation/window guards, external-url routing
-      ipc.ts      # ipcMain handlers (every sender origin-validated)
+      ipc.ts      # ipcMain handlers (every sender origin-validated) + IpcOutcome envelope
+      api-client.ts # sole authenticated HTTP client: bearer, refresh-once-on-401, typed ops
+      session-store.ts # safeStorage-encrypted token pair in userData; memory-only if unavailable
       window.ts   # BrowserWindow factory (sandbox, contextIsolation, no nodeIntegration)
       protocol.ts # custom app://bundle scheme (secure origin, file-backed, CSP on response)
       menu.ts     # native application menu (roles + Help → openExternal)
@@ -23,8 +25,13 @@ apps/desktop/
   src/            # renderer — the React 19 / Vite / Tailwind app (former apps/web)
     main.tsx  App.tsx  index.html
     layouts/AppShell.tsx
-    components/   # Sidebar, ApiStatusIndicator + ui/ primitives (Button, Input, Dialog, ...)
-    lib/          # config (reads window.bt), apiClient (health), nav, cn
+    components/   # Sidebar, ApiStatusIndicator + ui/ primitives (Button, Input, Dialog, Field, ...)
+    features/     # auth (Welcome), workspace (switcher/onboarding), team (members/invites),
+                  # home, settings
+    state/        # AuthProvider (session + workspace scoping for the renderer)
+    hooks/        # useResource (load/error/empty/reload)
+    lib/          # bridge (unwrap IpcOutcome→BridgeError), data (window.bt façade), rbac (visibility),
+                  # config, cn
     styles/       # Tailwind v4 @theme design tokens
     types/global.d.ts  # declares Window.bt: DesktopBridge
   package.json    # NO "type":"module" → main/preload emit CommonJS (sandboxed preload req.)
@@ -34,8 +41,11 @@ apps/desktop/
 
 - **Main** — full Node/Electron privileges. The _only_ place that resolves environment
   config (`BT_API_BASE_URL` → dev `http://localhost:4000` → packaged
-  `https://api.buildtogether.app`), owns window/lifecycle, and services IPC. Holds no user
-  secrets beyond env (secrets stay in `apps/api`).
+  `https://api.buildtogether.app`), owns window/lifecycle, services IPC, and **is the sole
+  authenticated API client**: it holds the current session's token pair (encrypted at rest via
+  `safeStorage`, in memory only when platform encryption is unavailable), attaches the bearer
+  token, refreshes once on 401, and never forwards a token across the bridge. Product secrets
+  (password hashes, DB, email creds) stay in `apps/api`.
 - **Preload** — sandboxed **CommonJS** script injected before the renderer. Bridges a
   minimal, allowlisted, typed surface (`window.bt`) via `contextBridge`. Never exposes
   `ipcRenderer`, `require`, or any Node global.
@@ -70,11 +80,14 @@ one source of truth and cannot drift.
 
 ## Renderer ⇄ API communication
 
-The renderer performs **no** privileged work and never learns a secret. It resolves the API
-base from `window.bt.getConfig()` (main-supplied, environment-aware) and calls the Express
-API over HTTPS using the shared `{ data, error, meta }` envelope (`src/lib/apiClient.ts`).
-Phase 1 exercises only the health endpoint; authentication, workspaces and messaging are
-later phases. There is no hardcoded localhost URL in any packaged build.
+The renderer performs **no** privileged network work and never learns a token. It calls named
+`window.bt` methods (auth/users/workspaces/members/invitations); **main** translates each into
+an HTTPS call to the Express API, applies the `{ data, error, meta }` envelope, and returns an
+`IpcOutcome<T>` — `{ ok, data }` or `{ ok:false, error:{ code, message, details } }` — never
+containing a token (`AuthSessionView` = identity + workspaces only). The renderer has no `fetch`
+path to the API for authenticated operations. Outside Electron (tests / preview) the bridge is
+absent and the app honestly gates to the sign-in screen. There is no hardcoded localhost URL in
+any packaged build.
 
 ## Build, run & packaging
 
@@ -90,11 +103,15 @@ compatible with our Vite 8. `externalizeDepsPlugin` keeps deps external **except
 `@buildtogether/shared`, which is bundled into main/preload because Node cannot import the
 source-only package at runtime.
 
-## Known limitations (Phase 1)
+## Known limitations
 
 - Packaging/code-signing/auto-update are **not executed** — only the built-bundle production
   path was smoke-launched; a real installer runtime is untested.
-- Navigation targets, workspace switcher, search and quick-create are honest placeholders —
-  no future-phase functionality is wired.
-- macOS-specific menu/window behaviors are implemented via standard roles but were validated
-  on Windows only.
+- Password reset and email verification are not yet implemented (ADR-0003); invitation email
+  uses a clearly-labelled **dev transport** (returns the link to the authorized inviter) until a
+  real provider is configured.
+- Search and quick-create remain honest placeholders; messaging/projects/tasks are Phase 3+/4+.
+- macOS-specific menu/window behaviors and `safeStorage` (Keychain) are implemented via standard
+  APIs but validated on Windows (DPAPI) only.
+- The workspace switcher, team management, invitations and settings are now **functional**
+  (Phase 2), backed by server-authoritative data — no longer placeholders.

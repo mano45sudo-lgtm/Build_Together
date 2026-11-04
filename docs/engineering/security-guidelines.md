@@ -16,10 +16,14 @@ dependency vulnerabilities.
 - AuthN every non-public endpoint; derive identity server-side; never trust client-claimed
   identity or workspace membership.
 - AuthZ on **every** scoped read/write: constrain by `workspaceId` from verified membership;
-  check role (owner/admin/member/guest) at the service layer for mutations — not only hidden
-  in the UI. Prevent IDOR: verify resource ownership before returning/mutating by id.
-- Sessions/tokens: short-lived access tokens; secure/HttpOnly/SameSite cookies; server-side
-  revocation. Passwords hashed with argon2/bcrypt; never plaintext or logged.
+  check role (owner/admin/member) at the service layer **and** route for mutations — not only
+  hidden in the UI. Prevent IDOR: verify resource ownership before returning/mutating by id.
+- Sessions/tokens (ADR-0003): server-managed **opaque** token pairs — short-lived access
+  (~15 min) + rotating refresh (~30 days) — stored **only as SHA-256 hashes** with immediate
+  server-side revocation and family-based reuse detection. **No** auth cookie (so CSRF is not
+  applicable); the Electron **main** process sends `Authorization: Bearer` and never exposes a
+  token to the renderer. Passwords hashed with **Argon2id** (`@node-rs/argon2`); never
+  plaintext or logged.
 
 ## Secrets & configuration
 
@@ -51,8 +55,14 @@ as untrusted:
   (never `file://`), navigation (`will-navigate`) and new windows
   (`setWindowOpenHandler`) are denied/validated, and `setPermissionRequestHandler` denies
   all permission requests.
-- **No secrets in the renderer:** the client receives only non-secret config; API credentials
-  and third-party secrets stay in `apps/api`.
+- **No secrets in the renderer:** the client receives only non-secret config and an
+  `AuthSessionView` (identity + workspaces) — never a token. The session token pair is held by
+  **main**, encrypted at rest via `safeStorage` (DPAPI/Keychain), falling back to memory-only
+  with a warning when platform encryption is unavailable (never plaintext on disk). API
+  credentials and third-party secrets stay in `apps/api`.
+- **IPC argument validation:** beyond sender-origin checks, every handler validates its
+  arguments (types, string shapes, allowed role values) before use; OWNER is rejected as an
+  assignable IPC role (ownership moves only through the dedicated transfer op).
 - **Minimal dependencies:** Electron/electron-vite/electron-builder only; kept on stable.
 
 ## Input, injection & output
@@ -88,10 +98,19 @@ Run the `security-review` checklist at the end of every phase touching auth, dat
 secrets, inputs, or network. Findings and any accepted risk are recorded here / in the phase
 report — never left implicit.
 
-## Phase 1 state
+## Phase 2 state (identity & teams — implemented)
 
-No auth endpoints or uploads exist yet. Phase 1 hardened the **desktop surface**: Electron
-process isolation, a typed/validated IPC bridge, CSP, custom-protocol loading, navigation/
-permission/window guards (see `desktop-architecture.md`). These guidelines and the skill
-establish the controls that every subsequent phase must satisfy from the moment it
-introduces the relevant surface.
+Phase 2 introduced the real auth/authz surface this document governs: Argon2id password
+hashing; opaque hashed sessions with rotation + family reuse detection and server-side
+revocation; workspace isolation enforced by `workspaceScope` + `requireWorkspaceRole`
+(server-derived, never client-supplied); role invariants (a workspace always has an owner;
+owner leaves only via transfer; no self-escalation). Secure invitations: random tokens stored
+only as hashes, expiring, single-use, and bound to the invited email + role — a token cannot
+grant a higher role or admit a different email. `express-rate-limit` throttles
+register/login/refresh/accept (per-IP and login per normalized email) with generic auth errors
+for anti-enumeration. Desktop session ownership and `safeStorage` handling are as above.
+
+**Accepted, documented risks (not defects):** no password reset / email verification yet
+(ADR-0003); invitation email uses a clearly-labelled dev transport until a real provider is
+configured; production email/SMTP config is required before invitations are genuinely
+deliverable.

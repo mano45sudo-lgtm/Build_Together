@@ -17,16 +17,19 @@ Pulse, and AI summaries, unified.
 
 ## Functional requirements (by capability)
 
-| #   | Capability               | Requirement (outcome)                                                             | Phase |
-| --- | ------------------------ | --------------------------------------------------------------------------------- | ----- |
-| R1  | Workspaces & teams       | Create/join workspaces; manage members and roles; everything is workspace-scoped. | 1     |
-| R2  | Direct & group messaging | 1:1 and group conversations, real-time via Nexconn.                               | 2     |
-| R3  | Project channels         | Channels bound to a project; project context visible alongside chat.              | 2–3   |
-| R4  | Conversation → task      | Select a message (or text) and create a task that keeps a link to its source.     | 3     |
-| R5  | Task assignment & Kanban | Assign, prioritize, and move tasks across board columns.                          | 3     |
-| R6  | Decision Vault           | Capture important decisions with context and retrieve them later.                 | 4     |
-| R7  | Team Pulse               | Surface activity/progress signals for a team/project.                             | 4     |
-| R8  | AI summaries & actions   | Summarize conversations and extract candidate actions (server-side AI).           | 5     |
+| #   | Capability               | Requirement (outcome)                                                             | Phase         |
+| --- | ------------------------ | --------------------------------------------------------------------------------- | ------------- |
+| R1  | Workspaces & teams       | Create/join workspaces; manage members and roles; everything is workspace-scoped. | 2 **(built)** |
+| R2  | Direct & group messaging | 1:1 and group conversations, real-time via Nexconn.                               | 3             |
+| R3  | Project channels         | Channels bound to a project; project context visible alongside chat.              | 3–4           |
+| R4  | Conversation → task      | Select a message (or text) and create a task that keeps a link to its source.     | 4             |
+| R5  | Task assignment & Kanban | Assign, prioritize, and move tasks across board columns.                          | 4             |
+| R6  | Decision Vault           | Capture important decisions with context and retrieve them later.                 | 5             |
+| R7  | Team Pulse               | Surface activity/progress signals for a team/project.                             | 5             |
+| R8  | AI summaries & actions   | Summarize conversations and extract candidate actions (server-side AI).           | 6             |
+
+_Phase numbers reflect the roadmap reconciliation (Phase 1 became the desktop foundation;_
+_the identity/workspace layer is Phase 2). `Closes R…` mappings are unchanged._
 
 ## Cross-cutting requirements
 
@@ -44,5 +47,7 @@ clear product reason; no AI features before the AI phase.
 
 ## Open product decisions (do not assume)
 
-Exact role permission matrix, presence/typing requirements, notification policy, integration
-details pending Nexconn docs, AI provider/model. Each is resolved with the user at its phase.
+The role permission matrix (OWNER/ADMIN/MEMBER) and workspace/team flow were finalized and
+implemented in Phase 2 (see `user-roles.md`, ADR-0003). Still open pending their phases:
+presence/typing requirements, notification policy, integration details pending Nexconn docs,
+AI provider/model. Each is resolved with the user at its phase.

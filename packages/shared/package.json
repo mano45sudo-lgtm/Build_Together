@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Shared TypeScript contracts (API envelope, common types) for BuildTogether web and api.",
+  "description": "Shared TypeScript contracts (API envelope, domain DTOs, desktop IPC) for the BuildTogether desktop client and API.",
   "exports": {
     ".": "./src/index.ts"
   },

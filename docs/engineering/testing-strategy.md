@@ -52,7 +52,23 @@ pnpm test:e2e                 # Playwright (after pnpm exec playwright install)
 Coverage % is a signal, not the goal — behavior + edge + authorization coverage is what
 matters. Accepted untested risks are recorded in the phase report, never implied as covered.
 
-## Phase 0 state
+## Phase 2 state (identity & teams — implemented)
 
-Scaffolds include a Vitest config and one trivial smoke test per app so the test toolchain
-is verified to run. Feature tests begin in the first functional phase (Phase 2+).
+Feature tests began with the first functional phase. **49 backend** + **14 desktop** tests pass.
+
+- **Backend integration (Vitest, real Docker PG `bt-postgres`):** full auth lifecycle
+  (register/login/me/logout), Argon2id hashing, refresh **rotation + family reuse detection**
+  (a stolen, already-rotated refresh revokes the lineage), generic auth errors / no account
+  enumeration, workspace CRUD + **server-side isolation** (cross-workspace access denied),
+  RBAC (owner/admin/member mutation rules, owner transfer, self-leave), and the invitation
+  lifecycle (create/accept/revoke, expiry, single-use, email+role binding) with rate-limit /
+  security cases. Integration files run with `fileParallelism: false` because they share one
+  test database (each resets it) — a documented isolation choice, not a flake.
+- **Desktop renderer (Vitest + Testing Library, jsdom):** the sign-in gate when no bridge is
+  present, and the authenticated shell + active workspace with a mocked `window.bt` bridge;
+  plus pure-function tests for the client RBAC visibility rules and invitation-token parsing.
+- **E2E (Playwright):** deferred — a full Electron runtime smoke is manual/CI (see
+  `environment-setup.md`); no browser E2E journey is claimed as passing.
+
+Nothing untested is implied as covered; the phase report states actual counts and names what
+was not run.

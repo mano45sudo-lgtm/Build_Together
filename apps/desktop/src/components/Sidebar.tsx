@@ -1,7 +1,7 @@
-import { ChevronsUpDown, Hammer, Layers } from 'lucide-react';
+import { Hammer } from 'lucide-react';
 import { NAV_ITEMS, type NavId } from '../lib/nav';
 import { NavItem } from './ui/NavItem';
-import { Tooltip } from './ui/Tooltip';
+import { WorkspaceSwitcher } from '../features/workspace/WorkspaceSwitcher';
 
 export interface SidebarProps {
   activeId: NavId;
@@ -22,19 +22,7 @@ export function Sidebar({ activeId, onSelectNav }: SidebarProps) {
       </div>
 
       <div className="px-3 pb-2">
-        <Tooltip label="Workspaces arrive in a later phase" side="bottom" className="w-full">
-          <button
-            type="button"
-            disabled
-            className="flex w-full items-center justify-between gap-2 rounded-md border border-border-subtle bg-surface-2 px-2.5 py-1.5 text-xs text-secondary opacity-70"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <Layers className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span className="truncate">Personal Workspace</span>
-            </span>
-            <ChevronsUpDown className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
-          </button>
-        </Tooltip>
+        <WorkspaceSwitcher />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Primary">
@@ -54,7 +42,7 @@ export function Sidebar({ activeId, onSelectNav }: SidebarProps) {
       </nav>
 
       <div className="border-t border-border-subtle px-4 py-3 text-2xs text-muted">
-        Phase 1 · desktop foundation
+        Phase 2 · identity &amp; teams
       </div>
     </aside>
   );

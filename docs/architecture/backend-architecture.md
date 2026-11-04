@@ -25,13 +25,16 @@ request
 apps/api/src/
   index.ts       # load+validate env, build app, listen
   app.ts         # express app factory (no listen → testable)
-  routes/v1/     # versioned routers
+  routes/        # v1.ts mounts the versioned routers
+    auth.routes.ts users.routes.ts workspaces.routes.ts invitations.routes.ts
   controllers/ services/ repositories/
-  middlewares/   # auth, workspaceScope, validate, requestLog, errorHandler
-  lib/           # env.ts (zod-validated), prisma.ts (client singleton), logger.ts
+  middlewares/   # auth, workspaceScope, requireWorkspaceRole, validate, requestLog, errorHandler
+  lib/           # env.ts (zod-validated), prisma.ts (adapter client singleton), logger.ts,
+                 # hashing.ts (Argon2id), tokens.ts, rate-limit.ts, envelope.ts
   errors/        # AppError + domain errors
-  types/
-prisma/          # schema.prisma + migrations (added in the DB phase)
+  test/          # integration harness + setup (real Docker PG)
+  tests/         # *.test.ts (auth, workspaces, security)
+prisma/          # schema.prisma + migrations
 ```
 
 ## Conventions
@@ -48,21 +51,39 @@ prisma/          # schema.prisma + migrations (added in the DB phase)
 
 ## Integration seams
 
-- **Desktop client:** the `apps/desktop` **renderer** (the untrusted Electron web UI) calls
-  this API over HTTPS. It resolves the base URL from the trusted main process
-  (`window.bt.getConfig()`) — environment-aware, never a hardcoded localhost production URL —
-  and receives only the standard `{ data, error, meta }` envelope. The API must treat the
-  renderer like any browser client: authenticate/authorize server-side, never trust a
-  client-supplied workspace id, and set CORS to the desktop origin allow-list. The desktop
-  main process holds no product secrets; credentials stay here.
+- **Desktop client:** the `apps/desktop` renderer is the untrusted Electron web UI and does
+  **not** call this API directly. The trusted **main** process is the sole authenticated
+  client: it attaches `Authorization: Bearer <access>` from its `safeStorage`-held session,
+  transparently refreshes once on 401, and forwards only named, argument-validated IPC results
+  (the `{ data, error, meta }` envelope, stripped of tokens) to the renderer. The API still
+  treats every request as untrusted: authenticate/authorize server-side, never trust a
+  client-supplied workspace id, and set CORS to the desktop origin allow-list. Credentials and
+  product secrets stay here; the main process holds only the current session's tokens.
 - **Nexconn:** backend performs privileged operations and mints short-lived, user-scoped
   tokens for the client SDK (see `nexconn-integration.md`). No App Secret leaves the server.
 - **AI:** behind a provider-independent service interface in `services/ai`; provider keys
   server-side; implemented in a later phase.
 
+## Phase 2 surface (built)
+
+Versioned, validated, enveloped `/api/v1` endpoints — each with zod validation at the edge,
+authentication, workspace-scoped authorization, and integration tests against real PG:
+
+- **Auth** (`auth.routes.ts`): `register`, `login`, `refresh` (rotation + reuse detection),
+  `logout`, `me`, `change-password`. Argon2id hashing; opaque hashed session pairs; throttled
+  by `makeAuthLimiter`; generic auth errors (no account enumeration).
+- **Users** (`users.routes.ts`): `PATCH /me` profile update (name/avatar).
+- **Workspaces** (`workspaces.routes.ts`): list/create/get/update scoped workspace ops; the
+  `workspaceScope` middleware resolves the workspace **and** the caller's membership/role from
+  the DB — a client-supplied `workspaceId` is never trusted. Members sub-routes are guarded by
+  `requireWorkspaceRole(role)`; role changes, removal and ownership **transfer** are authorized
+  server-side (a MEMBER may leave but only OWNER/ADMIN remove others; OWNER is never removed).
+- **Invitations** (`invitations.routes.ts`): create/list/revoke (ADMIN+), `accept`, and
+  `pending-for-me`. Tokens are random, stored only as hashes, expiring, single-use, and bound
+  to the target email + role; delivery runs through the `EmailService` provider abstraction.
+
 ## Not yet built
 
-The API remains a compiling Express skeleton (`app.ts` + `index.ts` with a **health route**
-only) and configuration. Phase 1 kept the health endpoint working and added an environment-
-aware API base for the desktop renderer — **no** product endpoints, auth, workspace, or
-messaging were introduced. Feature endpoints arrive in later phases.
+Messaging, projects/tasks, decisions, AI, analytics, external integrations and payment all
+remain unbuilt (Phase 3+); the API holds none of their routes or tables. There is no password
+reset yet (documented limitation, ADR-0003).

@@ -5,6 +5,65 @@ completion report; this log is the durable summary.
 
 ---
 
+## Phase 2 — Identity, Workspaces & Team Management
+
+**Date:** 2026-11-03 · **Status:** Complete (see acceptance in the phase report) · **Scope:**
+the first genuinely functional phase — real identity, sessions, workspaces, RBAC and
+team management across API + Electron. **No** messaging/projects/tasks/AI.
+
+### Work completed
+
+- **Auth decision** — self-managed authentication recorded in `ADR-0003` (managed providers,
+  stateless JWT, and renderer-consumed cookies compared and rejected); `ADR-0001` amended with
+  the Phase 2 identity/driver dependencies.
+- **Data layer** — Prisma schema for `User`/`Session`/`Workspace`/`WorkspaceMembership`/
+  `WorkspaceInvitation`; committed migration `20261103175232_init_identity_workspaces` applied
+  against Docker PG `bt-postgres` (additive, non-destructive); client built on the Prisma 7
+  `@prisma/adapter-pg` driver adapter.
+- **API surface** — layered controller/service/repository with infra (env validation, prisma
+  singleton, logger, `AppError`, zod `validate`, envelope, `express-rate-limit`, auth +
+  `workspaceScope` + `requireWorkspaceRole` middleware). Versioned `/api/v1` endpoints for
+  auth (register/login/refresh/logout/me/change-password), users, workspaces, members and
+  invitations — each validated, authenticated, authorized and enveloped.
+- **Security (ADR-0003)** — Argon2id passwords; server-managed **opaque hashed sessions** with
+  rotation + family reuse detection and immediate revocation; no auth cookie (CSRF N/A);
+  generic auth errors + throttling for anti-enumeration; workspace isolation is server-derived
+  (never a trusted client `workspaceId`); RBAC invariants (always an owner; owner leaves only
+  via transfer; no self-escalation). Secure invitations: hashed, expiring, single-use, bound to
+  email + role; dev email transport clearly labelled (no faked send).
+- **Electron integration** — the **main** process owns the session (`session-store.ts` via
+  `safeStorage`, memory-only fallback when encryption is unavailable) and is the sole
+  authenticated API client (`api-client.ts`: bearer + transparent refresh-once on 401);
+  `ipc.ts` exposes named, sender- and argument-validated handlers returning an `IpcOutcome`
+  envelope; `preload` publishes the full typed `window.bt` bridge. **Tokens never reach the
+  renderer** (it gets `AuthSessionView` only). Phase 1 security posture preserved.
+- **Renderer (Impeccable, Operate mode)** — `AuthProvider` session gate; welcome/sign-in/
+  sign-up; first-workspace onboarding; workspace switcher; team screen (members roster +
+  server-authoritative role management, invite, invitations panel); workspace settings;
+  profile & security (change password); invitation acceptance. Reuses existing tokens and
+  primitives; honest loading/empty/error states; `lib/rbac.ts` is visibility-only.
+- **Tests** — 49 backend integration tests (auth lifecycle, rotation + reuse detection,
+  hashing, no-enumeration, workspace CRUD + isolation, invitations, security/rate-limit) and
+  14 desktop renderer/pure tests (sign-in gate, authenticated shell, RBAC, token parsing).
+
+### Deviations / decisions under fire
+
+- Integration files run with `fileParallelism: false` — they share one test database each
+  resets; serializing avoids cross-file wipe races (documented, not a flake).
+- A plain MEMBER's self-removal (leave) was corrected to be allowed (route lowered to MEMBER;
+  the service still requires ADMIN+ to remove others) — surfaced by a failing test.
+- `@node-rs/argon2` (prebuilt N-API) chosen over node-gyp `argon2` for Windows install; the
+  `Algorithm` const enum isn't importable under `verbatimModuleSyntax`, so Argon2id (library
+  default) is used directly.
+
+### Docs updated
+
+ADR-0003 (new) + ADR-0001 (amended); phase-roadmap; database/backend/desktop architecture;
+security-guidelines; environment-setup (+ `.env.example`); testing-strategy; user-roles;
+feature-map; product-requirements.
+
+---
+
 ## Phase 1 — Build Together Desktop Product Foundation
 
 **Date:** 2026-11-03 · **Status:** Complete (see acceptance below) · **Scope:** desktop-first

@@ -1,24 +1,35 @@
 import { useEffect, useState } from 'react';
+import { Hammer } from 'lucide-react';
 import { AppShell } from './layouts/AppShell';
 import { EmptyState } from './components/ui/EmptyState';
 import { Dialog } from './components/ui/Dialog';
 import { Input } from './components/ui/Input';
+import { Spinner } from './components/ui/Spinner';
 import { NAV_ITEMS, type NavId } from './lib/nav';
-import { FALLBACK_API_BASE_URL, isDesktopRuntime } from './lib/config';
+import { AuthProvider, useAuth } from './state/AuthProvider';
+import { WelcomeScreen } from './features/auth/WelcomeScreen';
+import { HomeScreen } from './features/home/HomeScreen';
+import { TeamScreen } from './features/team/TeamScreen';
+import { SettingsScreen } from './features/settings/SettingsScreen';
 
-/**
- * Phase 1 desktop shell. Establishes a stable, secure Electron renderer and the product's
- * navigation skeleton — deliberately NOT a finished product. Every future-phase section is an
- * honest placeholder; no fake projects, messages, tasks or analytics are rendered.
- */
-export function App() {
+/** Boot splash shown while the persisted desktop session is being restored. */
+function Splash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
+      <Hammer className="size-5 text-accent" aria-hidden="true" />
+      <Spinner />
+      <span className="text-sm">Loading BuildTogether…</span>
+    </div>
+  );
+}
+
+function Shell() {
+  const { status, session, signOut } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
-  const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
-
-  // Keyboard-first: ⌘/Ctrl+K toggles global search (entry point only).
+  // Keyboard-first: ⌘/Ctrl+K toggles global search (entry point only; results arrive in a later phase).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -30,33 +41,42 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  if (status === 'checking') return <Splash />;
+  if (status === 'signed-out' || !session) return <WelcomeScreen />;
+
+  const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
+
+  const section = (() => {
+    switch (activeId) {
+      case 'home':
+        return <HomeScreen onOpenTeam={() => setActiveId('team')} />;
+      case 'team':
+        return <TeamScreen />;
+      case 'settings':
+        return <SettingsScreen />;
+      default:
+        return (
+          <div className="w-full max-w-xl">
+            <EmptyState icon={active.icon} title={active.label} description={active.arrival} />
+          </div>
+        );
+    }
+  })();
+
   return (
     <>
       <AppShell
         activeId={activeId}
         sectionLabel={active.label}
         sectionIcon={active.icon}
+        accountName={session.user.name}
         onSelectNav={setActiveId}
         onOpenSearch={() => setSearchOpen(true)}
         onQuickCreate={() => setQuickCreateOpen(true)}
         onOpenSettings={() => setActiveId('settings')}
+        onSignOut={() => void signOut()}
       >
-        <div className="w-full max-w-xl">
-          <EmptyState
-            icon={active.icon}
-            title={`${active.label} — placeholder`}
-            description={`${active.arrival} This is the Phase 1 desktop foundation; no product data is shown.`}
-          />
-          {!isDesktopRuntime() ? (
-            <p className="mt-4 text-center text-2xs text-muted">
-              Running outside the desktop shell — API base falls back to{' '}
-              <code className="font-mono text-secondary">
-                {import.meta.env.VITE_API_BASE_URL ?? FALLBACK_API_BASE_URL}
-              </code>
-              . Inside Electron it is resolved by the main process.
-            </p>
-          ) : null}
-        </div>
+        {section}
       </AppShell>
 
       <Dialog
@@ -66,8 +86,8 @@ export function App() {
         description="Search across workspaces, projects and tasks."
       >
         <Input placeholder="Search BuildTogether…" disabled />
-        <p className="mt-3 text-sm text-muted">
-          Search results arrive with the workspace and project phases.
+        <p className="mt-3 text-sm text-secondary">
+          Search results arrive with the project and messaging phases.
         </p>
       </Dialog>
 
@@ -77,10 +97,18 @@ export function App() {
         title="Quick create"
         description="Create tasks, notes and decisions from anywhere."
       >
-        <p className="text-sm text-muted">
+        <p className="text-sm text-secondary">
           Quick create arrives with task management in a later phase.
         </p>
       </Dialog>
     </>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <Shell />
+    </AuthProvider>
   );
 }

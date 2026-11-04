@@ -18,10 +18,12 @@ export interface AppShellProps {
   activeId: NavId;
   sectionLabel: string;
   sectionIcon: LucideIcon;
+  accountName: string;
   onSelectNav: (id: NavId) => void;
   onOpenSearch: () => void;
   onQuickCreate: () => void;
   onOpenSettings: () => void;
+  onSignOut: () => void;
   children: ReactNode;
 }
 
@@ -30,10 +32,12 @@ export function AppShell({
   activeId,
   sectionLabel,
   sectionIcon: SectionIcon,
+  accountName,
   onSelectNav,
   onOpenSearch,
   onQuickCreate,
   onOpenSettings,
+  onSignOut,
   children,
 }: AppShellProps) {
   return (
@@ -63,17 +67,22 @@ export function AppShell({
             <ApiStatusIndicator />
 
             <Dropdown
-              triggerLabel="Account"
-              trigger={<Avatar name="Guest User" size="sm" />}
+              triggerLabel="Account menu"
+              trigger={<Avatar name={accountName} size="sm" />}
               items={[
-                { id: 'profile', label: 'Profile', icon: User, onSelect: onOpenSettings },
-                { id: 'settings', label: 'Settings', icon: SettingsIcon, onSelect: onOpenSettings },
                 {
-                  id: 'sign-out',
-                  label: 'Sign out (later phase)',
-                  icon: LogOut,
-                  onSelect: () => {},
+                  id: 'profile',
+                  label: 'Profile & settings',
+                  icon: User,
+                  onSelect: onOpenSettings,
                 },
+                {
+                  id: 'settings',
+                  label: 'Workspace settings',
+                  icon: SettingsIcon,
+                  onSelect: onOpenSettings,
+                },
+                { id: 'sign-out', label: 'Sign out', icon: LogOut, onSelect: onSignOut },
               ]}
             />
           </div>

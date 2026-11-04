@@ -10,18 +10,18 @@ BuildTogether's PostgreSQL holds **application state and relationships only**. I
 receipts live in Nexconn. We store references (opaque Nexconn ids) and BuildTogether
 entities.
 
-## Planned entity domains (designed ahead, built phase by phase)
+## Entity domains (built phase by phase)
 
-| Domain    | Models (indicative)                                                    | Notes                                                               |
-| --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Identity  | `User`, `Session`                                                      | Auth; hashed credentials only.                                      |
-| Workspace | `Workspace`, `Membership(userId, workspaceId, role)`                   | Root of isolation; every scoped row carries `workspaceId`.          |
-| Projects  | `Project`, `ChannelLink(projectId, nexconnChannelId)`                  | Project channels reference Nexconn, don't mirror them.              |
-| Work      | `Task(workspaceId, projectId, status, assigneeId, sourceRef)`          | `sourceRef` stores the originating Nexconn message id → provenance. |
-| Decisions | `Decision(workspaceId, title, body, sourceRef, createdAt, deletedAt?)` | Decision Vault; soft-delete where history matters.                  |
-| Pulse/AI  | later (summary/action artifacts, pointers)                             | Introduced with the AI phase.                                       |
+| Domain    | Models (indicative)                                                              | Notes                                                                         |
+| --------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Identity  | `User`, `Session` **_(built, Phase 2)_**                                         | Auth; hashed credentials + hashed opaque sessions only.                       |
+| Workspace | `Workspace`, `WorkspaceMembership`, `WorkspaceInvitation` **_(built, Phase 2)_** | Root of isolation; every scoped row carries `workspaceId`.                    |
+| Projects  | `Project`, `ChannelLink(projectId, nexconnChannelId)`                            | Project channels reference Nexconn, don't mirror them. (Phase 4)              |
+| Work      | `Task(workspaceId, projectId, status, assigneeId, sourceRef)`                    | `sourceRef` stores the originating Nexconn message id → provenance. (Phase 4) |
+| Decisions | `Decision(workspaceId, title, body, sourceRef, createdAt, deletedAt?)`           | Decision Vault; soft-delete where history matters. (Phase 5)                  |
+| Pulse/AI  | later (summary/action artifacts, pointers)                                       | Introduced with the AI phase.                                                 |
 
-Exact fields are defined when each phase is authorized — **not** created in Phase 0.
+Fields for a domain are defined only when its phase is authorized — never created ahead.
 
 ## Design rules
 
@@ -46,17 +46,35 @@ pnpm --filter @buildtogether/api prisma:generate
 - **No destructive migration without written justification** + backfill/rollout note;
   prefer additive expand→migrate→contract.
 
-## Prisma 7 configuration note (verified in Phase 0)
+## Prisma 7 configuration note (verified)
 
 Prisma 7 **no longer allows the datasource `url` in `schema.prisma`** (error P1012). The
 schema declares only `provider = "postgresql"`; the connection URL is provided by
-`prisma.config.ts` (for the Migrate CLI) and to `PrismaClient` at runtime (direct adapter or
-Accelerate URL). Phase 0 validated `prisma validate` and `prisma generate` against the
-pinned stable `7.10.1` with an intentionally model-free schema; `prisma.config.ts` is added
-when migrations begin in the database phase.
+`prisma.config.ts` (for the Migrate CLI) and to `PrismaClient` at runtime through the
+`@prisma/adapter-pg` driver adapter (Query Compiler enabled, no bundled engine). Validated
+against the pinned stable `7.10.1`.
 
-## Phase 0 state
+## Phase 2 state (identity, workspaces & team management — built)
 
-No schema or migrations are created in Phase 0 (no features). This document establishes the
-design constraints so the first data phase starts from an agreed model. Prisma is kept on
-the **stable `7.x`** line, not the `8.x` RC.
+The first real schema is committed as migration `20261103175232_init_identity_workspaces`
+(applied against Docker PG `bt-postgres`; **non-destructive** — `CREATE` only, no `DROP`).
+Models and invariants:
+
+- **`User`** — `email @unique`, `passwordHash` (Argon2id; plaintext never stored), `status`
+  (`ACTIVE`/`DISABLED`), optional `avatarUrl`.
+- **`Session`** — server-managed opaque session. Only `accessTokenHash`/`refreshTokenHash`
+  (`@unique`, SHA-256) are stored; `familyId` groups a rotation lineage for reuse detection;
+  `revokedAt` + dual expiry (`accessExpiresAt`/`refreshExpiresAt`) enable immediate
+  server-side revocation. `onDelete: Cascade` from `User` clears a departing user's sessions.
+- **`Workspace`** — `createdBy` FK (`onDelete: Restrict`: never orphan audit of who created a
+  workspace); `name`/`description`/`iconUrl`.
+- **`WorkspaceMembership`** — `@@unique([workspaceId, userId])` (no double-add); role
+  `OWNER`/`ADMIN`/`MEMBER`; indexes on `(workspaceId, role)` and `(userId)` for the isolation
+  middleware and "my workspaces" query.
+- **`WorkspaceInvitation`** — `tokenHash @unique` (raw token returned once, never persisted);
+  `email`+`role` bound into the invite (prevents role/email escalation); `status`
+  (`PENDING`/`ACCEPTED`/`EXPIRED`/`REVOKED`) with `expiresAt`/`acceptedAt`/`revokedAt` giving
+  single-use, expiring tokens.
+
+Referential integrity, `cuid()` ids, `@updatedAt`, and leading `(workspaceId, …)` compound
+indexes follow the design rules above. Projects/Work/Decisions remain unbuilt (Phase 4+).

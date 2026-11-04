@@ -39,11 +39,21 @@ main/preload/renderer to `out/`) · `pnpm desktop:package` (`electron-builder`, 
 not run in Phase 1). Run the built bundle without an installer with
 `electron apps/desktop` (set `BT_PROD=1 BT_SMOKE=1` to exercise the production code path).
 
-## PostgreSQL (for data phases)
+## PostgreSQL (required from Phase 2)
 
-Point `DATABASE_URL` at a local/dev database, then:
-`pnpm --filter @buildtogether/api prisma:migrate` and `prisma:generate`. No schema exists in
-Phase 0; these commands become live when the database phase is authorized.
+The API needs a running PostgreSQL for auth + workspaces. Local dev uses a Docker container
+(`bt-postgres`, `postgres:16-alpine`, `buildtogether`/`buildtogether` on `127.0.0.1:5432`):
+
+```bash
+docker run -d --name bt-postgres -e POSTGRES_USER=buildtogether -e POSTGRES_PASSWORD=buildtogether \
+  -e POSTGRES_DB=buildtogether -p 5432:5432 postgres:16-alpine
+```
+
+Point `DATABASE_URL` at it, then apply the committed migration and generate the client:
+`pnpm --filter @buildtogether/api prisma:migrate` (uses `prisma.config.ts` + the
+`@prisma/adapter-pg` driver) and `prisma:generate`. The identity/workspace schema
+(`User`/`Session`/`Workspace`/`WorkspaceMembership`/`WorkspaceInvitation`) ships as migration
+`20261103175232_init_identity_workspaces`; the integration tests run against this database.
 
 ## Environment variables
 
@@ -63,9 +73,15 @@ Phase 0; these commands become live when the database phase is authorized.
 | --------------------------------------- | ------------------------------------------------------------------------------- | ------------- |
 | `NODE_ENV`                              | `development` locally.                                                          | 0             |
 | `PORT`                                  | HTTP port for the API.                                                          | 0             |
-| `DATABASE_URL`                          | PostgreSQL connection string (Prisma).                                          | DB phase      |
+| `DATABASE_URL`                          | PostgreSQL connection string (Prisma adapter). **Required (Phase 2+).**         | 2             |
 | `CORS_ORIGIN`                           | Allowed client origin(s) (the desktop renderer origin).                         | 0/1           |
-| `SESSION_SECRET`                        | Session signing secret.                                                         | Auth phase    |
+| `SESSION_SECRET`                        | Session value-derivation secret; strong random in prod (fail-closed).           | 2             |
+| `ACCESS_TOKEN_TTL_SECONDS`              | Opaque access-token lifetime (default 900 ≈ 15 min).                            | 2             |
+| `REFRESH_TOKEN_TTL_SECONDS`             | Opaque refresh-token lifetime (default 2592000 ≈ 30 d).                         | 2             |
+| `INVITATION_TTL_SECONDS`                | Invitation expiry (default 604800 ≈ 7 d).                                       | 2             |
+| `AUTH_RATE_LIMIT` / `INVITE_RATE_LIMIT` | Rate-limit ceilings for auth / invitation endpoints.                            | 2             |
+| `PUBLIC_APP_BASE_URL`                   | Base URL for invitation accept links (dev transport).                           | 2             |
+| `SMTP_URL` (optional)                   | Transactional email provider; unset ⇒ clearly-labelled **dev transport**.       | 2             |
 | `NEXCONN_APP_ID` / `NEXCONN_APP_SECRET` | Nexconn server credentials for identity/token minting. **Never in the client.** | Nexconn phase |
 | `AI_PROVIDER` / `AI_API_KEY`            | Provider-independent AI config. **Server-side only.**                           | AI phase      |
 

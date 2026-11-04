@@ -1,6 +1,6 @@
 # ADR-0001 — Technology Stack
 
-- **Status:** Accepted (Phase 0) · Amended (Phase 1 — added Electron desktop runtime; see ADR-0002)
+- **Status:** Accepted (Phase 0) · Amended (Phase 1 — added Electron desktop runtime; see ADR-0002) · Amended (Phase 2 — self-managed identity/auth dependencies; see ADR-0003)
 - **Date:** 2026-11-03
 - **Deciders:** Product brief + Principal Architect (this phase)
 
@@ -22,6 +22,8 @@ installed in Phase 0 (stable releases only).
 | Animation                  | Motion for React                                                              | motion 14.9.0                                                                  |
 | Icons                      | Lucide                                                                        | lucide-react 1.67.0                                                            |
 | Backend                    | Node.js + Express + TypeScript                                                | express 5.3.0, tsx 4.23.15                                                     |
+| Identity / auth            | Self-managed in `apps/api` (see ADR-0003)                                     | @node-rs/argon2 2.2.2, express-rate-limit 8.7.2, zod 4.6.7 (added Phase 2)     |
+| DB driver (Prisma 7 query) | PostgreSQL driver adapter                                                     | @prisma/adapter-pg 7.10.1, pg 8.23.1, dotenv 18.0.9 (added Phase 2)            |
 | Database                   | PostgreSQL + Prisma                                                           | prisma / @prisma/client **7.10.1 (stable)**                                    |
 | Real-time                  | Nexconn Chat SDK (managed messaging)                                          | integrated in a later phase, per official docs                                 |
 | AI                         | provider-independent server-side abstraction                                  | later phase                                                                    |
@@ -81,6 +83,25 @@ toolchain (not assumed):
    the connection URL is supplied via `prisma.config.ts` (Migrate CLI) and to the client at
    runtime. `prisma validate` and `prisma generate` pass. No `prisma.config.ts` is required
    in Phase 0 (generate/validate work without it); it is added when migrations begin.
+
+## Compatibility adjustments found during Phase 2 (identity & auth)
+
+Each verified by running the toolchain and the passing backend suite, not assumed:
+
+1. **Prisma 7 needs a driver adapter at runtime.** The Query Compiler has no bundled Postgres
+   driver, so the client is constructed through `@prisma/adapter-pg` (`pg`) with the connection
+   URL from env (`dotenv`). This replaces the classic bundled-engine client init.
+2. **`@node-rs/argon2` (prebuilt N-API), not `argon2` (node-gyp)** — installs on Windows with no
+   compiler; Argon2id is the library default. The `Algorithm` const enum is not importable under
+   `verbatimModuleSyntax`, so the default id mode is used rather than a named constant.
+3. **`express-rate-limit` v8 (draft-7 handler)** — the old `keyGenerator`/`handler` defaults
+   changed; dedicated `makeAuthLimiter`/`makeInviteLimiter` factories wrap the v8 API and set a
+   trust-proxy-independent key so a reverse proxy cannot defeat throttling.
+4. **`zod` v4 at the route edge** — parse-then-handle; error shaping reads the v4 `issues`
+   structure (`.flatten` is removed in v4), so validation output is mapped explicitly.
+5. **Opaque hashed sessions over JWT** — no token library added; sessions are SHA-256 rows with
+   family-based rotation/reuse detection, keeping the dependency set small and revocation
+   server-authoritative (see ADR-0003).
 
 ## Rejected alternatives
 

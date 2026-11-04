@@ -1,16 +1,9 @@
-// BuildTogether Prisma schema — Phase 0 compatibility scaffold ONLY.
+// BuildTogether Prisma schema — Phase 2: identity, workspaces & team management.
 //
-// Deliberately contains no models: the data model (User, Workspace, Membership, Project,
-// Task, Decision, …) is designed and migrated in the database phase, not Phase 0. This
-// file exists so Prisma can be validated/generated against the pinned stable version and
-// so migrations start from an agreed datasource.
-//
-// Prisma 7 compatibility note: the datasource `url` property is no longer supported in
-// the schema file. The connection URL now lives in `prisma.config.ts` (for the Migrate
-// CLI) and is provided to the client at runtime. See docs/architecture/database-
-// architecture.md.
-//
-// See the database-engineering skill.
+// Design governed by the database-engineering skill. Prisma 7 compatibility: the datasource
+// `url` is NOT declared here (Prisma 7 rejects it — error P1012); it is supplied via
+// `prisma.config.ts` (Migrate CLI) and to the client at runtime through the `@prisma/adapter-pg`
+// driver adapter (Query Compiler is enabled). See ADR-0001 and database-architecture.md.
 
 generator client {
   provider = "prisma-client-js"
@@ -18,4 +11,129 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---- Enums (closed state machines) ----
+
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+// ---- Identity ----
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  avatarUrl    String?
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  memberships       WorkspaceMembership[]
+  sessions          Session[]
+  workspacesCreated Workspace[]           @relation("WorkspaceCreator")
+  invitationsSent   WorkspaceInvitation[] @relation("InvitationInviter")
+
+  @@index([status])
+}
+
+/// Server-managed opaque session. Only SHA-256 hashes of the access/refresh tokens are
+/// stored (never the raw tokens). `familyId` groups a refresh-token rotation lineage so a
+/// reused (stolen) refresh token can revoke the whole family.
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessTokenHash  String    @unique
+  refreshTokenHash String    @unique
+  familyId         String
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  revokedAt        DateTime?
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([refreshExpiresAt])
+}
+
+// ---- Workspaces & membership ----
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  iconUrl     String?
+  createdById String
+  createdBy   User     @relation("WorkspaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships WorkspaceMembership[]
+  invitations WorkspaceInvitation[]
+
+  @@index([createdById])
+}
+
+/// A user's membership in a workspace, with a workspace-scoped role. Unique per
+/// (workspace, user) so a user cannot be double-added, and may hold different roles in
+/// different workspaces.
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId, role])
+}
+
+/// A pending invitation to join a workspace by email. Only the token hash is stored; the
+/// plaintext token is returned once (dev delivery) and never persisted. Expiry + status +
+/// single-use (acceptedAt/revokedAt) make tokens non-reusable.
+model WorkspaceInvitation {
+  id          String           @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole    @default(MEMBER)
+  tokenHash   String           @unique
+  invitedById String
+  invitedBy   User             @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([email, status])
+  @@index([expiresAt])
 }

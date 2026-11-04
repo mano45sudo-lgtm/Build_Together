@@ -1,10 +1,9 @@
 /**
  * Shared TypeScript contracts for BuildTogether.
  *
- * Both `@buildtogether/web` and `@buildtogether/api` compile against these shapes so the
- * API response format stays a single source of truth. This is intentionally just the
- * transport contract + a couple of common enums — NOT product domain models, which are
- * defined with the database in later phases.
+ * `@buildtogether/desktop` (renderer + main IPC) and `@buildtogether/api` compile against
+ * these shapes so the API response format and the domain model stay a single source of
+ * truth. Transport contract + common enums live here; Phase 2 domain DTOs in `./domain`.
  */
 
 /** Machine-readable error code carried in a failed response. */
@@ -45,9 +44,6 @@ export function isSuccess<T>(
 /** Task lifecycle states referenced by the product plan (work phase). */
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
 
-/** Workspace-scoped roles (authorization phase). */
-export type WorkspaceRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'GUEST';
-
 /** Health probe shape shared between api and any consumer. */
 export interface HealthReport {
   status: 'ok';
@@ -57,3 +53,6 @@ export interface HealthReport {
 
 // ---- Desktop (Electron) contracts ----
 export * from './desktop';
+
+// ---- Phase 2 domain contracts (identity, workspaces, membership, invitations) ----
+export * from './domain';

@@ -22,16 +22,17 @@ Workspace
 
 ## Feature inventory
 
-| Feature                  | Surface           | Depends on                        | Owns data                        | Phase |
-| ------------------------ | ----------------- | --------------------------------- | -------------------------------- | ----- |
-| Workspace & team mgmt    | Web + API         | auth                              | Workspace, Membership (Postgres) | 1     |
-| Direct & group messaging | Web (Nexconn SDK) | Nexconn token                     | metadata/pointers only           | 2     |
-| Project channels         | Web + API         | messaging, projects               | Project↔Nexconn channel link     | 2–3   |
-| Conversation → task      | Web action + API  | messaging                         | Task + sourceRef                 | 3     |
-| Task assignment & Kanban | Web + API         | workspaces, projects              | Task status/assignee             | 3     |
-| Decision Vault           | Web + API         | messaging                         | Decision + sourceRef             | 4     |
-| Team Pulse               | Web + API         | tasks, activity                   | derived/aggregates               | 4     |
-| AI summaries & actions   | API (server-side) | messaging content, AI abstraction | summary/action artifacts         | 5     |
+| Feature                    | Surface               | Depends on                        | Owns data                         | Phase | State |
+| -------------------------- | --------------------- | --------------------------------- | --------------------------------- | ----- | ----- |
+| Identity / authn & session | Desktop (main) + API  | —                                 | User, Session (Postgres)          | 2     | Built |
+| Workspace & team mgmt      | Desktop + API         | auth                              | Workspace, Membership, Invitation | 2     | Built |
+| Direct & group messaging   | Desktop (Nexconn SDK) | Nexconn token                     | metadata/pointers only            | 3     | —     |
+| Project channels           | Desktop + API         | messaging, projects               | Project↔Nexconn channel link      | 4     | —     |
+| Conversation → task        | Desktop action + API  | messaging                         | Task + sourceRef                  | 4     | —     |
+| Task assignment & Kanban   | Desktop + API         | workspaces, projects              | Task status/assignee              | 4     | —     |
+| Decision Vault             | Desktop + API         | messaging                         | Decision + sourceRef              | 5     | —     |
+| Team Pulse                 | Desktop + API         | tasks, activity                   | derived/aggregates                | 5     | —     |
+| AI summaries & actions     | API (server-side)     | messaging content, AI abstraction | summary/action artifacts          | 6     | —     |
 
 ## Key relationships (product invariants)
 
@@ -47,4 +48,6 @@ Workspace
 Video calls, file versioning UI, external integrations, billing UI, mobile apps. They stay
 out until there is a clear product reason (product philosophy: no feature without reason).
 
-Phase 0 builds none of the above — this map guides sequencing in later phases.
+Phase 0–1 built none of the data features above; **Phase 2 delivers the first two rows**
+(identity/auth and workspace/team management) — the isolation base every later row depends on.
+This map guides sequencing for the remaining phases.
