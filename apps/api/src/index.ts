@@ -1,3 +1,6 @@
+// Must be the first import: it loads apps/api/.env into process.env before `lib/env.ts`
+// (pulled in via app.js below) validates configuration eagerly at module-evaluation time.
+import './lib/load-env-file.js';
 import { createApp } from './app.js';
 import { loadEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';

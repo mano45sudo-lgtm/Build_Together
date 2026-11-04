@@ -6,6 +6,12 @@ import { isDev, trustedRendererOrigin } from './config';
  * Content Security Policy applied to every renderer document.
  * Production is strict (`script-src 'self'`, no remote content). Development relaxes only
  * what Vite HMR needs (the dev server origin + websocket), never enabling unsafe-eval.
+ *
+ * Dev exception: `@vitejs/plugin-react` injects an inline Fast-Refresh preamble into the transformed
+ * entry HTML. With `script-src 'self'` Chromium blocks it and `main.tsx` throws
+ * `Uncaught Error: @vitejs/plugin-react can't detect preamble`, so nothing mounts and the window
+ * renders blank. We relax `script-src` to `'self' 'unsafe-inline'` **only in dev**; the packaged
+ * build keeps the strict policy because `isDev()` is false there.
  */
 export function buildCspHeaderValue(): string {
   const directives = [
@@ -24,11 +30,21 @@ export function buildCspHeaderValue(): string {
   ];
 
   if (isDev()) {
-    // Allow HMR + the local dev API only in development.
+    // 1) Permit the plugin-react preamble (see docstring above).
+    directives.splice(
+      directives.indexOf("script-src 'self'"),
+      1,
+      "script-src 'self' 'unsafe-inline'",
+    );
+    // 2) Permit HMR + the local dev API regardless of which port Vite actually landed on.
+    //    `trustedRendererOrigin()` derives the origin from `ELECTRON_RENDERER_URL`, so an occupied
+    //    5173 falling through to 5174 keeps both IPC and HMR working.
+    const origin = trustedRendererOrigin();
+    const wsOrigin = origin.replace(/^http/, 'ws');
     directives.splice(
       directives.indexOf("connect-src 'self' https:"),
       1,
-      "connect-src 'self' https: http://localhost:5173 ws://localhost:5173 http://localhost:4000",
+      `connect-src 'self' https: ${origin} ${wsOrigin} http://localhost:4000`,
     );
     directives.splice(directives.indexOf('upgrade-insecure-requests'), 1);
   }

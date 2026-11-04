@@ -39,7 +39,20 @@ export function resolveDesktopConfig(): DesktopConfig {
   };
 }
 
-/** Origin the renderer is served from — used to validate IPC senders. */
+/** Origin the renderer is served from — used to validate IPC senders and to shape the dev CSP. */
 export function trustedRendererOrigin(): string {
-  return isDev() ? 'http://localhost:5173' : 'app://bundle';
+  if (!isDev()) return 'app://bundle';
+  // electron-vite injects the actual dev URL. If 5173 is already in use it silently falls through to
+  // 5174+; hardcoding 5173 here rejected every IPC call as `untrusted IPC sender` in that case and
+  // also leaked the wrong origin into the CSP `connect-src`. Derive from env, fall back to the
+  // conventional port only when the env is absent.
+  const devUrl = process.env.ELECTRON_RENDERER_URL;
+  if (devUrl) {
+    try {
+      return new URL(devUrl).origin;
+    } catch {
+      // Malformed env value: fall through to the default rather than refuse every IPC call.
+    }
+  }
+  return 'http://localhost:5173';
 }
