@@ -46,6 +46,7 @@ import type {
   WorkspaceSummary,
 } from '@buildtogether/shared';
 import {
+  DECISION_CATEGORIES,
   DECISION_SOURCES,
   DECISION_SORT_FIELDS,
   DECISION_STATUSES,
@@ -476,6 +477,9 @@ function buildDecisionQuery(query: DecisionListQuery): string {
   if (query.status && (DECISION_STATUSES as readonly string[]).includes(query.status)) {
     params.set('status', query.status);
   }
+  if (query.category && (DECISION_CATEGORIES as readonly string[]).includes(query.category)) {
+    params.set('category', query.category);
+  }
   if (query.projectId && /^[A-Za-z0-9_-]+$/.test(query.projectId)) {
     params.set('projectId', query.projectId);
   }
@@ -484,6 +488,9 @@ function buildDecisionQuery(query: DecisionListQuery): string {
   }
   if (query.participantId && /^[A-Za-z0-9_-]+$/.test(query.participantId)) {
     params.set('participantId', query.participantId);
+  }
+  if (query.ownerId && /^[A-Za-z0-9_-]+$/.test(query.ownerId)) {
+    params.set('ownerId', query.ownerId);
   }
   if (query.search && query.search.trim().length > 0) {
     params.set('search', query.search.trim().slice(0, 120));
@@ -530,8 +537,10 @@ export const decisions = {
     request<DecisionDetailView>('PATCH', `${ws(workspaceId)}/decisions/${decisionId}`, input),
   remove: (workspaceId: string, decisionId: string): Promise<null> =>
     request<null>('DELETE', `${ws(workspaceId)}/decisions/${decisionId}`),
-  finalize: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
-    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/finalize`),
+  approve: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/approve`),
+  reject: (workspaceId: string, decisionId: string): Promise<DecisionDetailView> =>
+    request<DecisionDetailView>('POST', `${ws(workspaceId)}/decisions/${decisionId}/reject`),
   supersede: (
     workspaceId: string,
     decisionId: string,

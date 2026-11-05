@@ -3,6 +3,7 @@ import type {
   ConversationKind,
   ConversationSummary,
   DecisionAlternativeView,
+  DecisionCategory,
   DecisionCommentView,
   DecisionDetailView,
   DecisionHistoryType,
@@ -316,6 +317,9 @@ export interface DecisionAlternativeRow {
   id: string;
   label: string;
   description: string | null;
+  advantages: string | null;
+  disadvantages: string | null;
+  rejectionReason: string | null;
   chosen: boolean;
 }
 
@@ -330,19 +334,22 @@ export interface DecisionReferenceRow {
 }
 
 /**
- * A decision row as the repository returns it: creator hydrated, the live context summary resolved
- * from whichever link is present (null when the context was removed — SetNull keeps the decision),
- * and the participant roster joined. Dates are `Date | null` here and serialized only at the wire.
+ * A decision row as the repository returns it: creator + owner hydrated, the live context summary
+ * resolved from whichever link is present (null when the context was removed — SetNull keeps the
+ * decision), and the participant roster joined. Dates are `Date | null` here and serialized only at
+ * the wire.
  */
 export interface DecisionRow {
   id: string;
   workspaceId: string;
   title: string;
+  summary: string | null;
   background: string | null;
   decision: string | null;
   rationale: string | null;
   consequences: string | null;
   status: DecisionStatus;
+  category: DecisionCategory;
   source: DecisionSource;
   /** NOT part of the wire DTO — the service needs it so RESTORE returns the pre-archive status. */
   preArchiveStatus: DecisionStatus | null;
@@ -354,10 +361,12 @@ export interface DecisionRow {
   context: { kind: 'PROJECT' | 'CONVERSATION' | 'TASK'; id: string; label: string } | null;
   createdAt: Date;
   updatedAt: Date;
-  finalizedAt: Date | null;
+  approvedAt: Date | null;
+  rejectedAt: Date | null;
   supersededAt: Date | null;
   archivedAt: Date | null;
   createdBy: { id: string; name: string };
+  owner: { id: string; name: string };
   participants: DecisionParticipantRow[];
 }
 
@@ -390,13 +399,16 @@ export function toDecisionView(d: DecisionRow): DecisionView {
     id: d.id,
     workspaceId: d.workspaceId,
     title: d.title,
+    summary: d.summary,
     background: d.background,
     decision: d.decision,
     rationale: d.rationale,
     consequences: d.consequences,
     status: d.status,
+    category: d.category,
     source: d.source,
     createdBy: { id: d.createdBy.id, name: d.createdBy.name },
+    owner: { id: d.owner.id, name: d.owner.name },
     projectId: d.projectId,
     conversationId: d.conversationId,
     taskId: d.taskId,
@@ -411,7 +423,8 @@ export function toDecisionView(d: DecisionRow): DecisionView {
     })),
     createdAt: iso(d.createdAt),
     updatedAt: iso(d.updatedAt),
-    finalizedAt: dateOrNull(d.finalizedAt),
+    approvedAt: dateOrNull(d.approvedAt),
+    rejectedAt: dateOrNull(d.rejectedAt),
     supersededAt: dateOrNull(d.supersededAt),
     archivedAt: dateOrNull(d.archivedAt),
   };
@@ -420,24 +433,23 @@ export function toDecisionView(d: DecisionRow): DecisionView {
 export function toDecisionDetailView(d: DecisionDetailRow): DecisionDetailView {
   return {
     ...toDecisionView(d),
-    alternatives: d.alternatives.map(
-      (a): DecisionAlternativeView => ({
-        id: a.id,
-        label: a.label,
-        description: a.description,
-        chosen: a.chosen,
-      }),
-    ),
-    references: d.references.map(
-      (r): DecisionReferenceView => ({
-        id: r.id,
-        type: r.type,
-        label: r.label,
-        url: r.url,
-        entityId: r.entityId,
-        resolvedLabel: r.resolvedLabel,
-      }),
-    ),
+    alternatives: d.alternatives.map((a): DecisionAlternativeView => ({
+      id: a.id,
+      label: a.label,
+      description: a.description,
+      advantages: a.advantages,
+      disadvantages: a.disadvantages,
+      rejectionReason: a.rejectionReason,
+      chosen: a.chosen,
+    })),
+    references: d.references.map((r): DecisionReferenceView => ({
+      id: r.id,
+      type: r.type,
+      label: r.label,
+      url: r.url,
+      entityId: r.entityId,
+      resolvedLabel: r.resolvedLabel,
+    })),
   };
 }
 

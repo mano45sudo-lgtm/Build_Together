@@ -16,37 +16,62 @@ import type { ApiResponse } from './index';
 // ---- Enums (mirror the Prisma enums; string unions for the wire) ----
 
 /**
- * Decision lifecycle. A closed state machine: DRAFT → IN_DISCUSSION → FINALIZED, with SUPERSEDED
- * (replaced by a newer decision — terminal for editing) and ARCHIVED (left the active set; restore
- * returns the pre-archive status). FINALIZED requires a non-empty decision statement (server-enforced).
+ * Decision lifecycle (brief §3). A closed state machine:
+ *   DRAFT (work-in-progress, freely editable by authorised users)
+ *     → PROPOSED (submitted for review; still editable by managers)
+ *       → APPROVED (the accepted direction — the decision statement must be non-empty server-side)
+ *       → REJECTED (a reviewed proposal that was not accepted; remains readable for history)
+ *   Any active status → SUPERSEDED (replaced by a newer decision; content-locked but readable)
+ *   Any status       → ARCHIVED (left the active set; RESTORE returns to the pre-archive status)
+ * Approved and rejected decisions are NEVER auto-derived; a human explicitly moves them.
  */
-export type DecisionStatus = 'DRAFT' | 'IN_DISCUSSION' | 'FINALIZED' | 'SUPERSEDED' | 'ARCHIVED';
+export type DecisionStatus =
+  'DRAFT' | 'PROPOSED' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED' | 'ARCHIVED';
+
+/** Decision subject area (brief §3 Decision Category). A small, useful, CLOSED set for vault filters. */
+export type DecisionCategory =
+  'PRODUCT' | 'DESIGN' | 'ENGINEERING' | 'BUSINESS' | 'OPERATIONS' | 'GENERAL';
 
 /** Where a decision came from. Derived server-side from the context link; MEETING/MANUAL are linkless. */
 export type DecisionSource = 'PROJECT' | 'CONVERSATION' | 'TASK' | 'MEETING' | 'MANUAL';
 
-/** The kinds of evidence a decision cites. DOCUMENT/LINK/FILE carry `url`; TASK/CONVERSATION carry `entityId`. */
-export type DecisionReferenceType = 'DOCUMENT' | 'LINK' | 'TASK' | 'CONVERSATION' | 'FILE';
+/**
+ * The kinds of evidence a decision cites. DOCUMENT/LINK/FILE carry `url`;
+ * TASK/CONVERSATION/DECISION carry `entityId` (validated same-workspace server-side).
+ */
+export type DecisionReferenceType =
+  'DOCUMENT' | 'LINK' | 'TASK' | 'CONVERSATION' | 'DECISION' | 'FILE';
 
 /** The important events on a decision's history timeline — a small closed vocabulary, not an audit platform. */
 export type DecisionHistoryType =
   | 'CREATED'
   | 'UPDATED'
   | 'STATUS_CHANGED'
-  | 'FINALIZED'
+  | 'APPROVED'
+  | 'REJECTED'
   | 'SUPERSEDED'
   | 'ALTERNATIVES_CHANGED'
   | 'REFERENCES_CHANGED'
   | 'PARTICIPANT_CHANGED'
+  | 'OWNER_CHANGED'
   | 'ARCHIVED'
   | 'RESTORED';
 
 export const DECISION_STATUSES: readonly DecisionStatus[] = [
   'DRAFT',
-  'IN_DISCUSSION',
-  'FINALIZED',
+  'PROPOSED',
+  'APPROVED',
+  'REJECTED',
   'SUPERSEDED',
   'ARCHIVED',
+] as const;
+export const DECISION_CATEGORIES: readonly DecisionCategory[] = [
+  'PRODUCT',
+  'DESIGN',
+  'ENGINEERING',
+  'BUSINESS',
+  'OPERATIONS',
+  'GENERAL',
 ] as const;
 export const DECISION_SOURCES: readonly DecisionSource[] = [
   'PROJECT',
@@ -60,24 +85,27 @@ export const DECISION_REFERENCE_TYPES: readonly DecisionReferenceType[] = [
   'LINK',
   'TASK',
   'CONVERSATION',
+  'DECISION',
   'FILE',
 ] as const;
 export const DECISION_HISTORY_TYPES: readonly DecisionHistoryType[] = [
   'CREATED',
   'UPDATED',
   'STATUS_CHANGED',
-  'FINALIZED',
+  'APPROVED',
+  'REJECTED',
   'SUPERSEDED',
   'ALTERNATIVES_CHANGED',
   'REFERENCES_CHANGED',
   'PARTICIPANT_CHANGED',
+  'OWNER_CHANGED',
   'ARCHIVED',
   'RESTORED',
 ] as const;
 
 // ---- Read models ----
 
-/** A lightweight actor reference (creator / history actor) — name only, no email. */
+/** A lightweight actor reference (creator / owner / history actor) — name only, no email. */
 export interface DecisionActorView {
   id: string;
   name: string;
@@ -90,17 +118,24 @@ export interface DecisionParticipantView {
   avatarUrl: string | null;
 }
 
-/** A considered option. At most one alternative per decision may be `chosen` (server-enforced). */
+/**
+ * A considered option. At most one alternative per decision may be `chosen` (server-enforced).
+ * The pros/cons and `rejectionReason` capture WHY an option lost, not just that it lost.
+ */
 export interface DecisionAlternativeView {
   id: string;
   label: string;
   description: string | null;
+  advantages: string | null;
+  disadvantages: string | null;
+  rejectionReason: string | null;
   chosen: boolean;
 }
 
 /**
- * Cited evidence. `resolvedLabel` is filled server-side for TASK/CONVERSATION references (the live
- * title of the linked entity, when it still exists in the workspace) so the UI can show + navigate.
+ * Cited evidence. `resolvedLabel` is filled server-side for TASK/CONVERSATION/DECISION references
+ * (the live title of the linked entity, when it still exists in the workspace) so the UI can show +
+ * navigate. Cross-workspace targets read as `resolvedLabel: null` (existence is not leaked).
  */
 export interface DecisionReferenceView {
   id: string;
@@ -139,13 +174,16 @@ export interface DecisionView {
   id: string;
   workspaceId: string;
   title: string;
+  summary: string | null;
   background: string | null;
   decision: string | null;
   rationale: string | null;
   consequences: string | null;
   status: DecisionStatus;
+  category: DecisionCategory;
   source: DecisionSource;
   createdBy: DecisionActorView;
+  owner: DecisionActorView;
   projectId: string | null;
   conversationId: string | null;
   taskId: string | null;
@@ -156,7 +194,8 @@ export interface DecisionView {
   participants: DecisionParticipantView[];
   createdAt: string;
   updatedAt: string;
-  finalizedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
   supersededAt: string | null;
   archivedAt: string | null;
 }
@@ -180,12 +219,15 @@ export const DECISION_SORT_FIELDS: readonly DecisionSortField[] = [
 
 export interface DecisionListQuery {
   status?: DecisionStatus;
+  category?: DecisionCategory;
   /** Restrict to one project's decisions (project Decisions section). */
   projectId?: string;
   source?: DecisionSource;
   /** Restrict to decisions a specific user participates in. */
   participantId?: string;
-  /** Substring match against title + decision statement (case-insensitive). */
+  /** Restrict to decisions owned by a specific user. */
+  ownerId?: string;
+  /** Substring match against title + summary + decision statement (case-insensitive). */
   search?: string;
   sort?: DecisionSortField;
   dir?: 'asc' | 'desc';
@@ -200,10 +242,17 @@ export interface DecisionListQuery {
 export interface DecisionAlternativeInput {
   label: string;
   description?: string | null;
+  advantages?: string | null;
+  disadvantages?: string | null;
+  rejectionReason?: string | null;
   chosen?: boolean;
 }
 
-/** Create/update payload for the cited references. Shape rules per type are enforced server-side. */
+/**
+ * Create/update payload for the cited references. Shape rules per type are enforced server-side:
+ * TASK/CONVERSATION/DECISION need `entityId` (validated in this workspace);
+ * DOCUMENT/LINK/FILE need `url` (http/https only).
+ */
 export interface DecisionReferenceInput {
   type: DecisionReferenceType;
   label: string;
@@ -212,17 +261,22 @@ export interface DecisionReferenceInput {
 }
 
 /**
- * Create a decision. Only `title` is required; status defaults to DRAFT. At most ONE context link may
- * be set; the server DERIVES `source` from it (PROJECT/CONVERSATION/TASK) and falls back to the
- * supplied MANUAL/MEETING value when no link is present. The creator is automatically a participant.
+ * Create a decision. Only `title` is required; status defaults to DRAFT and category to GENERAL.
+ * At most ONE context link may be set; the server DERIVES `source` from it (PROJECT/CONVERSATION/TASK)
+ * and falls back to the supplied MANUAL/MEETING value when no link is present. The creator is
+ * automatically a participant and the initial owner unless a different (workspace-member) `ownerId`
+ * is supplied.
  */
 export interface CreateDecisionInput {
   title: string;
+  summary?: string | null;
   background?: string | null;
   decision?: string | null;
   rationale?: string | null;
   consequences?: string | null;
-  status?: 'DRAFT' | 'IN_DISCUSSION';
+  status?: 'DRAFT' | 'PROPOSED';
+  category?: DecisionCategory;
+  ownerId?: string | null;
   source?: 'MANUAL' | 'MEETING';
   projectId?: string | null;
   conversationId?: string | null;
@@ -232,15 +286,22 @@ export interface CreateDecisionInput {
   references?: DecisionReferenceInput[];
 }
 
-/** Partial content update. A manager may edit; superseded/archived decisions are locked (409). */
+/**
+ * Partial content update. A manager may edit; superseded/archived decisions are locked (409).
+ * `status` may only move DRAFT ↔ PROPOSED here; APPROVED / REJECTED / SUPERSEDED / ARCHIVED
+ * require the dedicated lifecycle endpoints (so history records stay typed and transitions audited).
+ */
 export interface UpdateDecisionInput {
   title?: string;
+  summary?: string | null;
   background?: string | null;
   decision?: string | null;
   rationale?: string | null;
   consequences?: string | null;
-  /** Only DRAFT <-> IN_DISCUSSION via PATCH; finalize/supersede/archive have their own endpoints. */
-  status?: 'DRAFT' | 'IN_DISCUSSION';
+  status?: 'DRAFT' | 'PROPOSED';
+  category?: DecisionCategory;
+  /** Only a manager may reassign; the new owner must be a current workspace member. */
+  ownerId?: string;
   /** REPLACE semantics: the supplied set becomes the alternatives list (≤1 chosen, server-checked). */
   alternatives?: DecisionAlternativeInput[];
   /** REPLACE semantics: the supplied set becomes the references list. */

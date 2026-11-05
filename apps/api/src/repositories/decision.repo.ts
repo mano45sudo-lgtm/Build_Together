@@ -1,4 +1,5 @@
 import type {
+  DecisionCategory,
   DecisionHistoryType,
   DecisionReferenceType,
   DecisionSource,
@@ -34,11 +35,13 @@ type RawDecisionBase = {
   id: string;
   workspaceId: string;
   title: string;
+  summary: string | null;
   background: string | null;
   decision: string | null;
   rationale: string | null;
   consequences: string | null;
   status: DecisionStatus;
+  category: DecisionCategory;
   source: DecisionSource;
   preArchiveStatus: DecisionStatus | null;
   projectId: string | null;
@@ -48,26 +51,30 @@ type RawDecisionBase = {
   supersededBy: { title: string } | null;
   createdAt: Date;
   updatedAt: Date;
-  finalizedAt: Date | null;
+  approvedAt: Date | null;
+  rejectedAt: Date | null;
   supersededAt: Date | null;
   archivedAt: Date | null;
   createdBy: { id: string; name: string };
+  owner: { id: string; name: string };
   project: { id: string; name: string } | null;
   conversation: { id: string; title: string | null } | null;
   task: { id: string; title: string } | null;
   participants: { userId: string; user: { name: string; avatarUrl: string | null } }[];
 };
 
-/** The shared read shape: creator + supersede-target + the three context links + roster. */
+/** The shared read shape: creator + owner + supersede-target + the three context links + roster. */
 const baseSelect = {
   id: true,
   workspaceId: true,
   title: true,
+  summary: true,
   background: true,
   decision: true,
   rationale: true,
   consequences: true,
   status: true,
+  category: true,
   source: true,
   preArchiveStatus: true,
   projectId: true,
@@ -77,10 +84,12 @@ const baseSelect = {
   supersededBy: { select: { title: true } },
   createdAt: true,
   updatedAt: true,
-  finalizedAt: true,
+  approvedAt: true,
+  rejectedAt: true,
   supersededAt: true,
   archivedAt: true,
   createdBy: { select: { id: true, name: true } },
+  owner: { select: { id: true, name: true } },
   project: { select: { id: true, name: true } },
   conversation: { select: { id: true, title: true } },
   task: { select: { id: true, title: true } },
@@ -91,7 +100,15 @@ const detailSelect = {
   ...baseSelect,
   alternatives: {
     orderBy: { createdAt: 'asc' },
-    select: { id: true, label: true, description: true, chosen: true },
+    select: {
+      id: true,
+      label: true,
+      description: true,
+      advantages: true,
+      disadvantages: true,
+      rejectionReason: true,
+      chosen: true,
+    },
   },
   references: {
     orderBy: { createdAt: 'asc' },
@@ -101,7 +118,7 @@ const detailSelect = {
 
 type RawDecisionDetail = RawDecisionBase & {
   alternatives: DecisionAlternativeRow[];
-  references: (Omit<DecisionReferenceRow, 'resolvedLabel'>)[];
+  references: Omit<DecisionReferenceRow, 'resolvedLabel'>[];
 };
 
 /** Normalize the joined links into the single live `context` summary the view carries. */
@@ -109,11 +126,22 @@ function toDecisionRow(r: RawDecisionBase): DecisionRow {
   const context = r.project
     ? { kind: 'PROJECT' as const, id: r.project.id, label: r.project.name }
     : r.conversation
-      ? { kind: 'CONVERSATION' as const, id: r.conversation.id, label: r.conversation.title ?? 'Conversation' }
+      ? {
+          kind: 'CONVERSATION' as const,
+          id: r.conversation.id,
+          label: r.conversation.title ?? 'Conversation',
+        }
       : r.task
         ? { kind: 'TASK' as const, id: r.task.id, label: r.task.title }
         : null;
-  const { project, conversation, task, supersededBy, participants, ...rest } = r;
+  const {
+    project: _project,
+    conversation: _conversation,
+    task: _task,
+    supersededBy,
+    participants,
+    ...rest
+  } = r;
   return {
     ...rest,
     supersededByTitle: supersededBy?.title ?? null,
@@ -127,19 +155,25 @@ function toDecisionRow(r: RawDecisionBase): DecisionRow {
 }
 
 /**
- * Resolve TASK/CONVERSATION references against the workspace (the DB cannot express a polymorphic
- * FK, so the repo does it): an entity that no longer exists reads with `resolvedLabel: null` — the
- * reference row itself is kept (evidence survives; the link simply no longer resolves).
+ * Resolve TASK/CONVERSATION/DECISION references against the workspace (the DB cannot express a
+ * polymorphic FK, so the repo does it): an entity that no longer exists reads with
+ * `resolvedLabel: null` — the reference row itself is kept (evidence survives; the link simply no
+ * longer resolves).
  */
 async function resolveReferenceLabels(
   workspaceId: string,
   refs: RawDecisionDetail['references'],
 ): Promise<DecisionReferenceRow[]> {
-  const taskIds = refs.filter((x) => x.type === 'TASK' && x.entityId).map((x) => x.entityId as string);
+  const taskIds = refs
+    .filter((x) => x.type === 'TASK' && x.entityId)
+    .map((x) => x.entityId as string);
   const conversationIds = refs
     .filter((x) => x.type === 'CONVERSATION' && x.entityId)
     .map((x) => x.entityId as string);
-  const [tasks, conversations] = await Promise.all([
+  const decisionIds = refs
+    .filter((x) => x.type === 'DECISION' && x.entityId)
+    .map((x) => x.entityId as string);
+  const [tasks, conversations, decisions] = await Promise.all([
     taskIds.length > 0
       ? prisma.task.findMany({
           where: { id: { in: taskIds }, workspaceId },
@@ -152,15 +186,22 @@ async function resolveReferenceLabels(
           select: { id: true, title: true },
         })
       : Promise.resolve([]),
+    decisionIds.length > 0
+      ? prisma.decision.findMany({
+          where: { id: { in: decisionIds }, workspaceId },
+          select: { id: true, title: true },
+        })
+      : Promise.resolve([]),
   ]);
   const byId = new Map<string, string>([
     ...tasks.map((t) => [t.id, t.title] as const),
     ...conversations.map((c) => [c.id, c.title ?? 'Conversation'] as const),
+    ...decisions.map((d) => [d.id, d.title] as const),
   ]);
   return refs.map((x) => ({
     ...x,
     resolvedLabel:
-      (x.type === 'TASK' || x.type === 'CONVERSATION') && x.entityId
+      (x.type === 'TASK' || x.type === 'CONVERSATION' || x.type === 'DECISION') && x.entityId
         ? (byId.get(x.entityId) ?? null)
         : null,
   }));
@@ -168,7 +209,11 @@ async function resolveReferenceLabels(
 
 async function toDecisionDetailRow(r: RawDecisionDetail): Promise<DecisionDetailRow> {
   const base = toDecisionRow(r);
-  return { ...base, alternatives: r.alternatives, references: await resolveReferenceLabels(r.workspaceId, r.references) };
+  return {
+    ...base,
+    alternatives: r.alternatives,
+    references: await resolveReferenceLabels(r.workspaceId, r.references),
+  };
 }
 
 // ---- writes ----
@@ -182,6 +227,9 @@ export interface HistoryWrite {
 export interface AlternativeWrite {
   label: string;
   description: string | null;
+  advantages: string | null;
+  disadvantages: string | null;
+  rejectionReason: string | null;
   chosen: boolean;
 }
 
@@ -195,16 +243,19 @@ export interface ReferenceWrite {
 export interface CreateDecisionData {
   workspaceId: string;
   title: string;
+  summary: string | null;
   background: string | null;
   decision: string | null;
   rationale: string | null;
   consequences: string | null;
   status: DecisionStatus;
+  category: DecisionCategory;
   source: DecisionSource;
   projectId: string | null;
   conversationId: string | null;
   taskId: string | null;
   createdById: string;
+  ownerId: string;
   participantUserIds: string[];
   alternatives: AlternativeWrite[];
   references: ReferenceWrite[];
@@ -222,7 +273,11 @@ export async function createDecision(data: CreateDecisionData): Promise<Decision
       participants: { createMany: { data: participantUserIds.map((userId) => ({ userId })) } },
       history: {
         createMany: {
-          data: history.map((h) => ({ ...h, workspaceId: fields.workspaceId, actorId: fields.createdById })),
+          data: history.map((h) => ({
+            ...h,
+            workspaceId: fields.workspaceId,
+            actorId: fields.createdById,
+          })),
         },
       },
     },
@@ -247,20 +302,24 @@ export async function findDecision(
 export async function findDecisionAuthFields(
   decisionId: string,
   workspaceId: string,
-): Promise<
-  | {
-      id: string;
-      projectId: string | null;
-      createdById: string;
-      status: DecisionStatus;
-      decision: string | null;
-      title: string;
-    }
-  | null
-> {
+): Promise<{
+  id: string;
+  projectId: string | null;
+  createdById: string;
+  status: DecisionStatus;
+  decision: string | null;
+  title: string;
+} | null> {
   const row = await prisma.decision.findFirst({
     where: { id: decisionId, workspaceId },
-    select: { id: true, projectId: true, createdById: true, status: true, decision: true, title: true },
+    select: {
+      id: true,
+      projectId: true,
+      createdById: true,
+      status: true,
+      decision: true,
+      title: true,
+    },
   });
   return row;
 }
@@ -271,12 +330,16 @@ export async function findDecisionAuthFields(
  */
 export interface DecisionUpdateFields {
   title?: string;
+  summary?: string | null;
   background?: string | null;
   decision?: string | null;
   rationale?: string | null;
   consequences?: string | null;
   status?: DecisionStatus;
-  finalizedAt?: Date | null;
+  category?: DecisionCategory;
+  ownerId?: string;
+  approvedAt?: Date | null;
+  rejectedAt?: Date | null;
   supersededAt?: Date | null;
   archivedAt?: Date | null;
   preArchiveStatus?: DecisionStatus | null;
@@ -335,9 +398,9 @@ export async function deleteDecision(decisionId: string): Promise<void> {
   await prisma.decision.delete({ where: { id: decisionId } });
 }
 
-/** Does a project / conversation / task with this id live in this workspace? (link + ref validation) */
+/** Does a project / conversation / task / decision with this id live in this workspace? (link + ref validation) */
 export async function entityInWorkspace(
-  kind: 'PROJECT' | 'CONVERSATION' | 'TASK',
+  kind: 'PROJECT' | 'CONVERSATION' | 'TASK' | 'DECISION',
   entityId: string,
   workspaceId: string,
 ): Promise<boolean> {
@@ -345,7 +408,12 @@ export async function entityInWorkspace(
     return (await prisma.project.count({ where: { id: entityId, workspaceId } })) === 1;
   }
   if (kind === 'CONVERSATION') {
-    return (await prisma.workspaceConversation.count({ where: { id: entityId, workspaceId } })) === 1;
+    return (
+      (await prisma.workspaceConversation.count({ where: { id: entityId, workspaceId } })) === 1
+    );
+  }
+  if (kind === 'DECISION') {
+    return (await prisma.decision.count({ where: { id: entityId, workspaceId } })) === 1;
   }
   return (await prisma.task.count({ where: { id: entityId, workspaceId } })) === 1;
 }
@@ -448,9 +516,11 @@ export interface ListDecisionsParams {
   callerRole: WorkspaceRole;
   callerId: string;
   status: DecisionStatus | undefined;
+  category: DecisionCategory | undefined;
   projectId: string | undefined;
   source: DecisionSource | undefined;
   participantId: string | undefined;
+  ownerId: string | undefined;
   search: string | undefined;
   sort: DecisionSortField;
   dir: 'asc' | 'desc';
@@ -484,13 +554,28 @@ function decodeCursor(cursor: string): { v: string; id: string } | null {
 export async function listDecisions(
   params: ListDecisionsParams,
 ): Promise<{ rows: DecisionRow[]; nextCursor: string | null }> {
-  const { workspaceId, callerRole, callerId, status, projectId, source, participantId, search, sort, dir, limit, cursor } =
-    params;
+  const {
+    workspaceId,
+    callerRole,
+    callerId,
+    status,
+    category,
+    projectId,
+    source,
+    participantId,
+    ownerId,
+    search,
+    sort,
+    dir,
+    limit,
+    cursor,
+  } = params;
 
   const where: Prisma.DecisionWhereInput = { workspaceId };
   const and: Prisma.DecisionWhereInput[] = [];
 
   if (status) where.status = status;
+  if (category) where.category = category;
   // A project's Decisions section shows decisions linked to the project ITSELF and to its tasks —
   // the single-link model keeps provenance honest while the project remains the natural grouping.
   if (projectId) {
@@ -498,11 +583,13 @@ export async function listDecisions(
   }
   if (source) where.source = source;
   if (participantId) where.participants = { some: { userId: participantId } };
+  if (ownerId) where.ownerId = ownerId;
   if (search) {
     // Lives in AND so it never clobbers the projectId filter's OR (both may apply at once).
     and.push({
       OR: [
         { title: { contains: search, mode: 'insensitive' } },
+        { summary: { contains: search, mode: 'insensitive' } },
         { decision: { contains: search, mode: 'insensitive' } },
       ],
     });
@@ -584,7 +671,13 @@ export async function listHistory(
 
   const rows = await prisma.decisionHistory.findMany({
     where,
-    select: { id: true, type: true, message: true, createdAt: true, actor: { select: { id: true, name: true } } },
+    select: {
+      id: true,
+      type: true,
+      message: true,
+      createdAt: true,
+      actor: { select: { id: true, name: true } },
+    },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });

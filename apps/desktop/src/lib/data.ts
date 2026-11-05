@@ -137,8 +137,10 @@ export const api = {
       unwrap(requireBridge().decisions.update(workspaceId, decisionId, input)),
     remove: (workspaceId: string, decisionId: string) =>
       unwrap(requireBridge().decisions.remove(workspaceId, decisionId)),
-    finalize: (workspaceId: string, decisionId: string) =>
-      unwrap(requireBridge().decisions.finalize(workspaceId, decisionId)),
+    approve: (workspaceId: string, decisionId: string) =>
+      unwrap(requireBridge().decisions.approve(workspaceId, decisionId)),
+    reject: (workspaceId: string, decisionId: string) =>
+      unwrap(requireBridge().decisions.reject(workspaceId, decisionId)),
     supersede: (workspaceId: string, decisionId: string, input: SupersedeDecisionInput) =>
       unwrap(requireBridge().decisions.supersede(workspaceId, decisionId, input)),
     archive: (workspaceId: string, decisionId: string) =>

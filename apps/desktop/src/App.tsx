@@ -11,6 +11,7 @@ import { HomeScreen } from './features/home/HomeScreen';
 import { MyWorkScreen } from './features/mywork/MyWorkScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { ProjectsScreen } from './features/projects/ProjectsScreen';
+import { DecisionsScreen } from './features/decisions/DecisionsScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 
 /**
@@ -110,6 +111,8 @@ function Shell() {
         return <TeamScreen />;
       case 'projects':
         return <ProjectsScreen onOpenMessages={() => setActiveId('messages')} />;
+      case 'decisions':
+        return <DecisionsScreen />;
       case 'settings':
         return <SettingsScreen />;
       default:

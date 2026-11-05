@@ -109,10 +109,40 @@ reliably API-backed with no faked realtime. 128 backend + 33 desktop tests pass;
 - production builds green. **No** conversation→task, Decision Vault, Team Pulse, AI, time tracking,
   Gantt, subtasks, recurring tasks or integrations (Phase 6+).
 
-## Phase 6 — Decisions & insight _(not authorized)_
+## Phase 6 — Decisions & insight _(Decision Vault complete; Team Pulse not started)_
 
-Decision Vault (capture with context, retrieve, soft-delete history); Team Pulse activity/
-progress signals. Closes R6, R7.
+> **Scope note.** The **authorized Phase 6 brief** scoped this execution to the **Decision Vault**
+> only. Team Pulse activity/progress signals remain **not started** and require their own
+> authorization; nothing was stubbed toward them. Closes R6 (decision capture/retrieve); R7
+> (Team Pulse) remains open.
+
+**Decision Vault — complete.** Two additive, non-destructive migrations
+(`20261104093318_add_decision_vault` + `20261104104500_decision_vault_lifecycle_and_ownership`)
+introduce first-class `Decision` records with `DecisionAlternative`/`DecisionReference`/
+`DecisionParticipant`/`DecisionHistory`/`DecisionComment`, a `DRAFT→PROPOSED→APPROVED/REJECTED` (+
+`SUPERSEDED`/`ARCHIVED`) **closed state machine**, `DecisionCategory`, an accountable **owner**
+(separate from immutable authorship), and considered alternatives/references. Versioned, validated,
+enveloped `/api/v1` endpoints mount under `/workspaces/:workspaceId/decisions` (existing workspace-
+role middleware gates every route; cross-workspace id → **404**): collection list (status/category/
+project/source/participant/owner/search filters, sort, keyset cursor) + create, single get/patch/
+delete, **dedicated lifecycle** routes (approve/reject/supersede/archive/restore so history stays
+typed), participant add/remove, and paginated **history** + **comments** feeds. Server-side rules
+(the boundary — the UI only mirrors them): manager set mirrors `task.service`; **APPROVE requires a
+non-empty decision statement**; `SUPERSEDED`/`ARCHIVED` lock content (409); `≤1 chosen alternative`;
+owners/participants must be current members; the creator is an immovable participant; every link is
+re-validated in-workspace. Shared `decisions.ts` contracts + the full Electron IPC chain
+(sender-/argument-validated; tokens never reach the renderer). Impeccable Operate surface in the
+established **monochrome** language: a **Decisions** nav entry (workspace vault — Grouped/List,
+lifecycle-ordered sections, real empty/loading/error states) and a **Decisions** tab inside the
+project workspace, reusing one `DecisionRow`/`DecisionDetail` (inline edit, lifecycle bar,
+alternatives REPLACE semantics, references, participants, comments, history timeline) and a minimal
+quick-create. **Decision realtime is honestly deferred** (no validated Nexconn domain-event
+broadcast) — fully API-backed `mutate→reload`, no faked push. **Context deep-links to a specific
+project/conversation are read-only labels** (the shell has no deep-link route yet — not faked).
+**163 backend + 36 desktop tests pass; all quality gates (migrations, typecheck, lint, format,
+test, build) green.**
+
+**Team Pulse — not started (needs authorization).** Activity/progress signals across the workspace.
 
 ## Phase 7 — AI layer _(not authorized)_
 
@@ -132,12 +162,13 @@ require an explicit decision + ADR.
 
 ## Status tracker
 
-| Phase | State                                     |
-| ----- | ----------------------------------------- |
-| 0     | Complete                                  |
-| 1     | Complete (desktop foundation)             |
-| 2     | Complete (identity, workspaces & teams)   |
-| 3     | Complete (real-time communication)        |
-| 4     | Complete (projects & project structure)   |
-| 5     | Complete (task management & dependencies) |
-| 6–7   | Not started / not authorized              |
+| Phase | State                                           |
+| ----- | ----------------------------------------------- |
+| 0     | Complete                                        |
+| 1     | Complete (desktop foundation)                   |
+| 2     | Complete (identity, workspaces & teams)         |
+| 3     | Complete (real-time communication)              |
+| 4     | Complete (projects & project structure)         |
+| 5     | Complete (task management & dependencies)       |
+| 6     | Decision Vault complete; Team Pulse not started |
+| 7     | Not started / not authorized                    |

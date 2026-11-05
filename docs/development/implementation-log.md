@@ -5,6 +5,147 @@ completion report; this log is the durable summary.
 
 ---
 
+## Phase 6 — Decision Vault
+
+**Date:** 2026-11-05 · **Status:** Complete & verified (all gates green) · **Scope:** the project
+**decision layer** — workspace/project-scoped, first-class `Decision` records with a closed
+lifecycle state machine, categorisation, an accountable owner (separate from authorship), considered
+alternatives, cited references (incl. decision→decision), participants, a typed history timeline and
+a discussion thread, across API + Electron + renderer. **Deliberately excluded** (Phase 6 brief):
+auto-deriving decisions from chat messages, AI decision suggestions, execution intelligence,
+conversation/task **deep-links** from the vault (the shell has no deep-link route yet — see Known
+issues), Team Pulse, Connected Apps, and every later phase. **No future-phase features were begun.**
+
+### Work completed
+
+- **Data layer** — two additive, **non-destructive** migrations. `20261104093318_add_decision_vault`
+  creates `Decision`, `DecisionAlternative`, `DecisionReference`, `DecisionParticipant`,
+  `DecisionHistory`, `DecisionComment` (+ `DecisionStatus`/`DecisionSource`/`DecisionReferenceType`/
+  `DecisionHistoryType` enums, workspace/project/status indexes, FKs). `20261104104500_decision_vault_lifecycle_and_ownership`
+  aligns the schema to the brief **in place**: renames the lifecycle enum values
+  (`IN_DISCUSSION→PROPOSED`, `FINALIZED→APPROVED`), adds `REJECTED`; adds a `DECISION` reference type
+  and an `OWNER_CHANGED`/`REJECTED` history event; introduces `DecisionCategory`
+  (`PRODUCT/DESIGN/ENGINEERING/BUSINESS/OPERATIONS/GENERAL`, default `GENERAL`); adds `summary`,
+  `category`, `rejectedAt`; **backfills `ownerId` from `createdById` before it becomes `NOT NULL`**
+  (authorship never moves, ownership can — kept deliberately separate); extends alternatives with
+  `advantages`/`disadvantages`/`rejectionReason`; adds a workspace+category and workspace+owner index
+  and a `Restrict` owner FK. No decision data is dropped; no prior-phase data touched.
+- **Backend** (`apps/api`, layered route→controller→service→repository, only repos touch Prisma) —
+  `/api/v1/workspaces/:workspaceId/decisions` mounted AFTER `authenticate` +
+  `requireWorkspaceRole('MEMBER')` with `mergeParams`, so every `:decisionId` is resolved against the
+  PATH workspace (**cross-workspace id → 404**, no existence leak). Endpoints: list + create
+  (collection), get/patch/delete (`/:decisionId`), **dedicated lifecycle** routes
+  (`/approve` `/reject` `/supersede` `/archive` `/restore`) so history stays typed and PATCH cannot
+  reach finalising states, participant add/remove, and paginated **history** + **comments** feeds.
+  Zod at the edge (`decisions.schemas.ts`): a single-link refine, a `createSourceSchema`
+  (`MEETING/MANUAL` only when linkless), a `patchableStatusSchema` (`DRAFT↔PROPOSED`), and a
+  reference refine (`TASK/CONVERSATION/DECISION` need `entityId`; `DOCUMENT/LINK/FILE` need an
+  **http(s)** `url`). All responses use the `{data,error,meta}` envelope; list + feeds use **keyset
+  cursor** pagination. Every multi-record write (decision + alternatives + references + participants
+  - history) runs inside one **`$transaction`**.
+- **Server-side lifecycle & access rules (the security boundary — the UI only mirrors it):** VIEW
+  gates on `projectService.getProject` visibility (a denied PRIVATE-project read surfaces **404**);
+  **CREATE** needs context visibility, and every link is re-validated to live in **this** workspace
+  (`DECISION_MULTI_LINK`, `DECISION_LINK_INVALID`). The **manager** set (edit/propose/approve/reject/
+  supersede/archive/restore/delete/participants/owner-change) is exactly `task.service`'s rule:
+  workspace OWNER/ADMIN, the creator, the owner, or the linked project's manager — else **403
+  `INSUFFICIENT_ROLE`**. The lifecycle is a **closed state machine** (`STATUS_TRANSITIONS`);
+  an out-of-matrix move → **409 `INVALID_TRANSITION`**; **APPROVE requires a non-empty decision
+  statement** (`DECISION_STATEMENT_REQUIRED`); **SUPERSEDED/ARCHIVED lock content** (409
+  `DECISION_LOCKED`); restore returns the `preArchiveStatus`. `≤1 chosen alternative` is
+  server-enforced (`TOO_MANY_CHOSEN`); owners/participants must be current members
+  (`PARTICIPANT_NOT_MEMBER`); the **creator cannot be removed** from the roster
+  (`CREATOR_REQUIRED`); a decision can't supersede itself or a locked target (`SELF_SUPERSEDE`,
+  `SUPERSEDE_TARGET_LOCKED`). References resolve their linked entity's live title server-side
+  (`resolvedLabel`), reading as `null` across the workspace boundary.
+- **Shared contracts** — `packages/shared/src/decisions.ts` (`DecisionView`, `DecisionDetailView`,
+  `DecisionActorView`/`ParticipantView`/`AlternativeView`/`ReferenceView`/`HistoryView`/`CommentView`,
+  `Create/Update/Supersede/Participant/Comment` inputs, `DecisionListQuery` + status/category/source/
+  reference/history/sort unions) exported from the barrel; both sides of the Electron boundary
+  compile against one source of truth.
+- **Electron integration** — decisions flow through the existing hardened bridge, no new privilege:
+  `shared/desktop.ts` adds a `DesktopBridge.decisions` namespace + `decisions:*` IPC channels; the
+  main process registers sender- and argument-validated handlers that allowlist the payload/query;
+  `main/api-client.ts` is the sole authenticated caller; `preload` re-exports the typed methods.
+  **Tokens never reach the renderer** (`lib/data.ts` unwraps `IpcOutcome`→`BridgeError`).
+- **Renderer (Impeccable, Operate mode)** — a **Decisions** nav entry + workspace `DecisionsScreen`
+  (server-driven search/category filter + Grouped/List views, sections ordered by lifecycle), and a
+  **Decisions** tab added to the existing `ProjectWorkspace` (Overview · Tasks · Conversations ·
+  **Decisions** · Members/Settings) reusing the same `DecisionRow`/`DecisionDetail` via a
+  `ProjectDecisionsPanel` scoped by `projectId`. `DecisionDetail` is the full surface: inline-editable
+  content (saved on blur), a lifecycle bar (Propose / Withdraw / Approve — gated on the statement /
+  Reject / Archive / Restore / Supersede-with-candidate-picker), alternatives with REPLACE semantics
+  (radio ≤1 chosen), references, participants (creator immovable), a comments thread and the history
+  timeline. `CreateDecisionDialog` is minimal (title required, everything else optional). The whole
+  feature mirrors the established **monochrome** language from `DESIGN.md` — horizontal divided rows,
+  status colour reserved for meaning and always labelled, real empty/loading/error states. **No mock
+  decisions, no hardcoded history, no placeholder screens** anywhere.
+
+### Deviations / decisions under fire
+
+- **Brief alignment mid-flight** — the initial vault migration used `IN_DISCUSSION`/`FINALIZED`;
+  the product brief specifies `PROPOSED`/`APPROVED`/`REJECTED` plus category + a separate accountable
+  owner. This was corrected by the second, non-destructive migration and propagated through
+  shared → API → bridge → renderer (typecheck + full suite re-greened), rather than left drifted.
+- **Lifecycle via dedicated endpoints, not PATCH** — finalising moves (approve/reject/supersede/
+  archive/restore) get their own routes so each writes a correctly-typed history row; PATCH is
+  schema-restricted to `DRAFT↔PROPOSED` only.
+- **Context links render, but don't yet deep-link** — the shell has no deep-link route to a specific
+  project/conversation, so the vault shows those context links as honest **read-only labels**; only
+  decision→decision navigation (supersede target, `DECISION` reference) is clickable. No dead
+  affordances were added.
+- **Decision realtime is honestly deferred** — the Phase 3 Nexconn surface exposes no domain-event
+  broadcast for decision changes; rather than build a second channel or fake push (§8), the vault is
+  fully API-backed (every mutation persists then re-fetches; `mutate→reload`, the same validated
+  pattern as projects/tasks).
+
+### Validation executed & results (all run in-session, none assumed)
+
+| Check      | Command                 | Result                                                       |
+| ---------- | ----------------------- | ------------------------------------------------------------ |
+| Migrations | `prisma migrate status` | ✅ 6 migrations; DB schema up to date                        |
+| Typecheck  | `pnpm -r typecheck`     | ✅ shared + api + desktop                                    |
+| Lint       | `pnpm lint`             | ✅ 0 problems (exit 0)                                       |
+| Format     | `pnpm format:check`     | ✅ all Prettier-clean                                        |
+| Tests      | `pnpm -r test`          | ✅ **163** backend (9 files) + **36** desktop (5 files)      |
+| Build      | `pnpm -r build`         | ✅ api tsc→dist; desktop electron-vite main/preload/renderer |
+
+- **New backend coverage** — `decisions.test.ts` adds **35** integration tests against real PG:
+  create defaults (`DRAFT`/`GENERAL`/`MANUAL`, owner=creator, creator auto-participant), `source`
+  derivation from a project link, explicit `PROPOSED`+member-owner create, empty-title + non-member
+  owner/participant rejection, single-link enforcement, PRIVATE-project link → 404, ≤1 chosen
+  alternative (`TOO_MANY_CHOSEN`), reference shape/target legality (incl. `javascript:` url barred),
+  list filters (status/category/project/owner/participant/search) + keyset cursor, PATCH edits +
+  alternatives REPLACE, `DRAFT↔PROPOSED` allowed / finalising states barred via PATCH, approve-with-
+  statement + `DECISION_STATEMENT_REQUIRED`, reject-keeps-readable, illegal transition (`409`),
+  supersede + `SELF_SUPERSEDE` + `supersededByTitle`, content lock on archive (`DECISION_LOCKED`),
+  archive→restore to `preArchiveStatus`, participant add/remove + `CREATOR_REQUIRED`, a typed history
+  timeline, the comments feed with author/editor deletion, manager delete, RBAC (fellow MEMBER 403 /
+  ADMIN+OWNER manage), non-member `403 NOT_A_MEMBER`, unauthenticated `401`, cross-workspace foreign
+  id → `404`, and PRIVATE-project decision hidden → `404`.
+- **New desktop coverage** — `rbac.test.ts` adds **3** `canManageDecision` cases (OWNER/ADMIN manage
+  all; a plain MEMBER only what they created/own; a project-manager's decision via the linked
+  project), keeping the client mirror honest.
+- Phase 2–5 remain green (auth + workspaces + members + invitations + chat + webhook + projects +
+  tasks), now subsumed in the **163**-test backend total; desktop is **36** across 5 files.
+
+### Known issues / remaining work
+
+- **Decision realtime is genuinely deferred** — it needs a Nexconn domain-event broadcast that does
+  not exist yet; the vault is fully API-backed with `mutate→reload`, never a faked push. Wiring real
+  decision events belongs to a later, authorized phase once the provider capability is validated.
+- **Context deep-linking** — decision→project/conversation rows are read-only labels; making them
+  navigable requires a shell deep-link route (a small, isolated follow-up, deliberately not faked
+  here).
+
+### Out-of-scope confirmation (Phase 6 exclusions honored)
+
+- No auto-derived decisions from messages, no AI suggestions/recommendations, no execution
+  intelligence, no Team Pulse, no Connected Apps, no billing/reporting/Gantt. Every Phase 6
+  affordance in the UI maps to a real, tested endpoint; nothing was stubbed for visual completeness.
+
+---
+
 ## Phase 5 — Task Management, Ownership & Dependencies
 
 **Date:** 2026-11-04 · **Status:** Complete & verified (all gates green) · **Scope:** the project

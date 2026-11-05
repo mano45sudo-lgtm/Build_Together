@@ -233,7 +233,10 @@ export interface DesktopBridge {
    */
   decisions: {
     list(workspaceId: string, query: DecisionListQuery): Promise<IpcOutcome<DecisionView[]>>;
-    create(workspaceId: string, input: CreateDecisionInput): Promise<IpcOutcome<DecisionDetailView>>;
+    create(
+      workspaceId: string,
+      input: CreateDecisionInput,
+    ): Promise<IpcOutcome<DecisionDetailView>>;
     get(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
     update(
       workspaceId: string,
@@ -241,7 +244,10 @@ export interface DesktopBridge {
       input: UpdateDecisionInput,
     ): Promise<IpcOutcome<DecisionDetailView>>;
     remove(workspaceId: string, decisionId: string): Promise<IpcOutcome<null>>;
-    finalize(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    /** DRAFT/PROPOSED → APPROVED. Server requires a non-empty decision statement. */
+    approve(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
+    /** PROPOSED → REJECTED. Rejected decisions stay readable for historical reference. */
+    reject(workspaceId: string, decisionId: string): Promise<IpcOutcome<DecisionDetailView>>;
     supersede(
       workspaceId: string,
       decisionId: string,
@@ -347,7 +353,8 @@ export const IPC = {
   DECISIONS_GET: 'decisions:get',
   DECISIONS_UPDATE: 'decisions:update',
   DECISIONS_REMOVE: 'decisions:remove',
-  DECISIONS_FINALIZE: 'decisions:finalize',
+  DECISIONS_APPROVE: 'decisions:approve',
+  DECISIONS_REJECT: 'decisions:reject',
   DECISIONS_SUPERSEDE: 'decisions:supersede',
   DECISIONS_ARCHIVE: 'decisions:archive',
   DECISIONS_RESTORE: 'decisions:restore',

@@ -112,14 +112,12 @@ const bridge: DesktopBridge = {
     update: (workspaceId, decisionId, input) =>
       invoke(IPC.DECISIONS_UPDATE, workspaceId, decisionId, input),
     remove: (workspaceId, decisionId) => invoke(IPC.DECISIONS_REMOVE, workspaceId, decisionId),
-    finalize: (workspaceId, decisionId) =>
-      invoke(IPC.DECISIONS_FINALIZE, workspaceId, decisionId),
+    approve: (workspaceId, decisionId) => invoke(IPC.DECISIONS_APPROVE, workspaceId, decisionId),
+    reject: (workspaceId, decisionId) => invoke(IPC.DECISIONS_REJECT, workspaceId, decisionId),
     supersede: (workspaceId, decisionId, input) =>
       invoke(IPC.DECISIONS_SUPERSEDE, workspaceId, decisionId, input),
-    archive: (workspaceId, decisionId) =>
-      invoke(IPC.DECISIONS_ARCHIVE, workspaceId, decisionId),
-    restore: (workspaceId, decisionId) =>
-      invoke(IPC.DECISIONS_RESTORE, workspaceId, decisionId),
+    archive: (workspaceId, decisionId) => invoke(IPC.DECISIONS_ARCHIVE, workspaceId, decisionId),
+    restore: (workspaceId, decisionId) => invoke(IPC.DECISIONS_RESTORE, workspaceId, decisionId),
     addParticipant: (workspaceId, decisionId, input) =>
       invoke(IPC.DECISIONS_ADD_PARTICIPANT, workspaceId, decisionId, input),
     removeParticipant: (workspaceId, decisionId, userId) =>

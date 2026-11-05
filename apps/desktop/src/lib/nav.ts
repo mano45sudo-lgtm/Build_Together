@@ -3,12 +3,13 @@ import {
   Folder,
   Home,
   MessageSquare,
+  Scale,
   Settings,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 
-export type NavId = 'home' | 'mywork' | 'projects' | 'messages' | 'team' | 'settings';
+export type NavId = 'home' | 'mywork' | 'projects' | 'decisions' | 'messages' | 'team' | 'settings';
 
 export type NavGroup = 'main' | 'workspace';
 
@@ -29,6 +30,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'home', label: 'Home', icon: Home, group: 'main' },
   { id: 'mywork', label: 'My Work', icon: ClipboardList, group: 'main' },
   { id: 'projects', label: 'Projects', icon: Folder, group: 'main' },
+  { id: 'decisions', label: 'Decisions', icon: Scale, group: 'main' },
   { id: 'messages', label: 'Conversations', icon: MessageSquare, group: 'main' },
   { id: 'team', label: 'Members', icon: Users, group: 'workspace' },
   { id: 'settings', label: 'Settings', icon: Settings, group: 'workspace' },

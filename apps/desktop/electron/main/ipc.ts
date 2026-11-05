@@ -15,6 +15,7 @@ import type {
   CreateTaskInput,
   CreateWorkspaceInput,
   DecisionAlternativeInput,
+  DecisionCategory,
   DecisionListQuery,
   DecisionParticipantInput,
   DecisionReferenceInput,
@@ -43,6 +44,7 @@ import type {
 } from '@buildtogether/shared';
 import {
   IPC,
+  DECISION_CATEGORIES,
   DECISION_REFERENCE_TYPES,
   DECISION_SORT_FIELDS,
   DECISION_SOURCES,
@@ -348,8 +350,13 @@ function reqBool(value: unknown, field: string): boolean {
 function buildAlternatives(value: unknown): DecisionAlternativeInput[] {
   return objArray(value, 'alternatives').map((o) => {
     const item: DecisionAlternativeInput = { label: reqStr(o['label'], 'alternatives[].label') };
-    if ('description' in o) {
-      item.description = optStrOrNull(o['description'], 'alternatives[].description') ?? null;
+    for (const field of [
+      'description',
+      'advantages',
+      'disadvantages',
+      'rejectionReason',
+    ] as const) {
+      if (field in o) item[field] = optStrOrNull(o[field], `alternatives[].${field}`) ?? null;
     }
     if ('chosen' in o) item.chosen = reqBool(o['chosen'], 'alternatives[].chosen');
     return item;
@@ -390,15 +397,16 @@ function contextLink(o: Record<string, unknown>, key: string): string | undefine
 /** Build a CreateDecisionInput. Title is required; the server derives `source` from the context link. */
 function buildCreateDecision(o: Record<string, unknown>): CreateDecisionInput {
   const payload: CreateDecisionInput = { title: reqStr(o['title'], 'title') };
-  for (const field of ['background', 'decision', 'rationale', 'consequences'] as const) {
+  for (const field of ['summary', 'background', 'decision', 'rationale', 'consequences'] as const) {
     const value = optStr(o[field], field);
     if (value !== undefined) payload[field] = value;
   }
-  const status = optEnum<'DRAFT' | 'IN_DISCUSSION'>(o['status'], 'status', [
-    'DRAFT',
-    'IN_DISCUSSION',
-  ]);
+  const status = optEnum<'DRAFT' | 'PROPOSED'>(o['status'], 'status', ['DRAFT', 'PROPOSED']);
   if (status !== undefined) payload.status = status;
+  const category = optEnum<DecisionCategory>(o['category'], 'category', DECISION_CATEGORIES);
+  if (category !== undefined) payload.category = category;
+  const ownerId = contextLink(o, 'ownerId');
+  if (ownerId !== undefined) payload.ownerId = ownerId;
   const source = optEnum<'MANUAL' | 'MEETING'>(o['source'], 'source', ['MANUAL', 'MEETING']);
   if (source !== undefined) payload.source = source;
   const projectId = contextLink(o, 'projectId');
@@ -420,14 +428,15 @@ function buildUpdateDecision(o: Record<string, unknown>): UpdateDecisionInput {
   const payload: UpdateDecisionInput = {};
   const title = optStr(o['title'], 'title');
   if (title !== undefined) payload.title = title;
-  for (const field of ['background', 'decision', 'rationale', 'consequences'] as const) {
+  for (const field of ['summary', 'background', 'decision', 'rationale', 'consequences'] as const) {
     if (field in o) payload[field] = optStrOrNull(o[field], field) ?? null;
   }
-  const status = optEnum<'DRAFT' | 'IN_DISCUSSION'>(o['status'], 'status', [
-    'DRAFT',
-    'IN_DISCUSSION',
-  ]);
+  const status = optEnum<'DRAFT' | 'PROPOSED'>(o['status'], 'status', ['DRAFT', 'PROPOSED']);
   if (status !== undefined) payload.status = status;
+  const category = optEnum<DecisionCategory>(o['category'], 'category', DECISION_CATEGORIES);
+  if (category !== undefined) payload.category = category;
+  const ownerId = contextLink(o, 'ownerId');
+  if (ownerId !== undefined) payload.ownerId = ownerId;
   if (o['alternatives'] !== undefined) payload.alternatives = buildAlternatives(o['alternatives']);
   if (o['references'] !== undefined) payload.references = buildReferences(o['references']);
   return payload;
@@ -440,12 +449,16 @@ function buildDecisionListQuery(value: unknown): DecisionListQuery {
   const query: DecisionListQuery = {};
   const status = optEnum<DecisionStatus>(o['status'], 'status', DECISION_STATUSES);
   if (status !== undefined) query.status = status;
+  const category = optEnum<DecisionCategory>(o['category'], 'category', DECISION_CATEGORIES);
+  if (category !== undefined) query.category = category;
   const source = optEnum<DecisionSource>(o['source'], 'source', DECISION_SOURCES);
   if (source !== undefined) query.source = source;
   const projectId = contextLink(o, 'projectId');
   if (projectId !== undefined) query.projectId = projectId;
   const participantId = contextLink(o, 'participantId');
   if (participantId !== undefined) query.participantId = participantId;
+  const ownerId = contextLink(o, 'ownerId');
+  if (ownerId !== undefined) query.ownerId = ownerId;
   const search = optStr(o['search'], 'search');
   if (search !== undefined) query.search = search;
   const sort = optEnum<DecisionSortField>(o['sort'], 'sort', DECISION_SORT_FIELDS);
@@ -947,10 +960,7 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.DECISIONS_CREATE, (event, workspaceId: unknown, input: unknown) =>
     handle(event, () =>
-      api.decisions.create(
-        reqId(workspaceId, 'workspaceId'),
-        buildCreateDecision(asObject(input)),
-      ),
+      api.decisions.create(reqId(workspaceId, 'workspaceId'), buildCreateDecision(asObject(input))),
     ),
   );
 
@@ -978,9 +988,15 @@ export function registerIpc(): void {
     ),
   );
 
-  ipcMain.handle(IPC.DECISIONS_FINALIZE, (event, workspaceId: unknown, decisionId: unknown) =>
+  ipcMain.handle(IPC.DECISIONS_APPROVE, (event, workspaceId: unknown, decisionId: unknown) =>
     handle(event, () =>
-      api.decisions.finalize(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+      api.decisions.approve(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.DECISIONS_REJECT, (event, workspaceId: unknown, decisionId: unknown) =>
+    handle(event, () =>
+      api.decisions.reject(reqId(workspaceId, 'workspaceId'), reqId(decisionId, 'decisionId')),
     ),
   );
 

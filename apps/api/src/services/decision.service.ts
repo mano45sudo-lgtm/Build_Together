@@ -16,7 +16,12 @@ import * as decisionRepo from '../repositories/decision.repo.js';
 import * as projectService from './project.service.js';
 import * as workspaceRepo from '../repositories/workspace.repo.js';
 import type { HistoryWrite } from '../repositories/decision.repo.js';
-import { toDecisionDetailView, toDecisionCommentView, toDecisionHistoryView, toDecisionView } from '../lib/view.js';
+import {
+  toDecisionDetailView,
+  toDecisionCommentView,
+  toDecisionHistoryView,
+  toDecisionView,
+} from '../lib/view.js';
 import type { DecisionDetailRow } from '../lib/view.js';
 
 /**
@@ -29,17 +34,38 @@ import type { DecisionDetailRow } from '../lib/view.js';
  *   - VIEW (list / get / history / comments): every workspace member, EXCEPT a decision linked to a
  *       PRIVATE project, which is limited to that project's visibility set (owner/creator +
  *       OWNER/ADMIN). Denied reads are a 404 — existence is not leaked across the visibility boundary.
- *   - CREATE: anyone who can VIEW the linked context. The creator is automatically a participant;
- *       every additional participant must be a current workspace member.
- *   - EDIT / FINALIZE / SUPERSEDE / ARCHIVE / RESTORE / DELETE / PARTICIPANTS: the decision's creator,
- *       its project's manager (workspace OWNER/ADMIN, or the project owner/creator), or a workspace
- *       OWNER/ADMIN for linkless decisions. Mirrors `task.service`'s manager rule exactly.
+ *   - CREATE: anyone who can VIEW the linked context. The creator is automatically a participant and
+ *       the initial owner (unless a different workspace-member `ownerId` is supplied).
+ *   - EDIT / PROPOSE / APPROVE / REJECT / SUPERSEDE / ARCHIVE / RESTORE / DELETE / PARTICIPANTS /
+ *       OWNER-CHANGE: the decision's manager — its creator, its owner, its project's manager
+ *       (workspace OWNER/ADMIN, or the project owner/creator), or a workspace OWNER/ADMIN for
+ *       linkless decisions. Mirrors `task.service`'s manager rule exactly.
  *   - COMMENT: anyone who can VIEW the decision. A comment is removed by its author or an editor.
  *
- * Lifecycle: DRAFT → IN_DISCUSSION → FINALIZED; FINALIZED requires a non-empty decision statement.
- * SUPERSEDED (replaced by a newer decision) and ARCHIVED lock content editing (409); restore returns
- * the pre-archive status. Decisions are explicit — nothing here is ever auto-created from messages.
+ * Lifecycle (a closed state machine — brief §3/§9): DRAFT → PROPOSED → APPROVED, plus REJECTED (a
+ * reviewed proposal that was not accepted; it stays readable for history). APPROVED requires a
+ * non-empty decision statement. Only the transitions the matrix below allows are legal; every move
+ * writes a typed history row. SUPERSEDED (replaced by a newer decision) and ARCHIVED lock content
+ * editing (409); restore returns the pre-archive status. Decisions are explicit — nothing here is
+ * ever auto-created from messages.
+ *
+ *   from        →  allowed targets
+ *   DRAFT          PROPOSED (PATCH), APPROVED (approve), ARCHIVED
+ *   PROPOSED       DRAFT (PATCH), APPROVED (approve), REJECTED (reject), ARCHIVED
+ *   APPROVED       SUPERSEDED (supersede), ARCHIVED
+ *   REJECTED       SUPERSEDED (supersede), ARCHIVED
+ *   SUPERSEDED     (none — locked)
+ *   ARCHIVED       restore → preArchiveStatus
  */
+
+const STATUS_TRANSITIONS: Record<DecisionStatus, readonly DecisionStatus[]> = {
+  DRAFT: ['PROPOSED', 'APPROVED', 'ARCHIVED'],
+  PROPOSED: ['DRAFT', 'APPROVED', 'REJECTED', 'ARCHIVED'],
+  APPROVED: ['SUPERSEDED', 'ARCHIVED'],
+  REJECTED: ['SUPERSEDED', 'ARCHIVED'],
+  SUPERSEDED: [],
+  ARCHIVED: [],
+};
 
 export interface Caller {
   userId: string;
@@ -70,13 +96,16 @@ async function loadDecision(
   if (row.projectId) {
     const project = await projectService.getProject(row.projectId, workspaceId, caller); // 404 if hidden
     projectManage =
-      caller.role !== 'MEMBER' || project.owner.id === caller.userId || project.createdById === caller.userId;
+      caller.role !== 'MEMBER' ||
+      project.owner.id === caller.userId ||
+      project.createdById === caller.userId;
   }
   const canManage =
     projectManage ||
     caller.role === 'OWNER' ||
     caller.role === 'ADMIN' ||
-    caller.userId === row.createdBy.id;
+    caller.userId === row.createdBy.id ||
+    caller.userId === row.owner.id;
   return { row, canManage };
 }
 
@@ -84,7 +113,7 @@ function requireManage(canManage: boolean): void {
   if (!canManage) {
     throw forbidden(
       'INSUFFICIENT_ROLE',
-      'Only the creator or a project manager can manage this decision',
+      'Only the creator, the owner or a project manager can manage this decision',
     );
   }
 }
@@ -96,7 +125,18 @@ function requireEditable(status: DecisionStatus): void {
   }
 }
 
-/** Assert `userId` is a current member of `workspaceId` (participants must be real members). */
+/** Assert the requested `next` status is reachable from `current` per the transition matrix. */
+function requireTransition(current: DecisionStatus, next: DecisionStatus): void {
+  if (current === next) return; // idempotent moves are no-ops at the caller
+  if (!STATUS_TRANSITIONS[current].includes(next)) {
+    throw conflict(
+      'INVALID_TRANSITION',
+      `A ${label(current)} decision cannot move to ${label(next)}`,
+    );
+  }
+}
+
+/** Assert `userId` is a current member of `workspaceId` (participants / owners must be real members). */
 async function requireMember(workspaceId: string, userId: string, message: string): Promise<void> {
   const role = await workspaceRepo.getRole(workspaceId, userId);
   if (!role) throw badRequest('PARTICIPANT_NOT_MEMBER', message);
@@ -114,7 +154,12 @@ async function resolveLink(
     taskId?: string | null | undefined;
   },
   fallbackSource: 'MANUAL' | 'MEETING' | undefined,
-): Promise<{ projectId: string | null; conversationId: string | null; taskId: string | null; source: DecisionSource }> {
+): Promise<{
+  projectId: string | null;
+  conversationId: string | null;
+  taskId: string | null;
+  source: DecisionSource;
+}> {
   const present = [links.projectId, links.conversationId, links.taskId].filter(
     (v): v is string => typeof v === 'string' && v.length > 0,
   );
@@ -131,7 +176,9 @@ async function resolveLink(
     return { ...none, projectId: links.projectId, source: 'PROJECT' };
   }
   if (links.conversationId && present.length === 1) {
-    if (!(await decisionRepo.entityInWorkspace('CONVERSATION', links.conversationId, workspaceId))) {
+    if (
+      !(await decisionRepo.entityInWorkspace('CONVERSATION', links.conversationId, workspaceId))
+    ) {
       throw badRequest('DECISION_LINK_INVALID', 'The conversation is not in this workspace');
     }
     return { ...none, conversationId: links.conversationId, source: 'CONVERSATION' };
@@ -156,24 +203,33 @@ function resolveAlternatives(
   return list.map((a) => ({
     label: a.label,
     description: a.description ?? null,
+    advantages: a.advantages ?? null,
+    disadvantages: a.disadvantages ?? null,
+    rejectionReason: a.rejectionReason ?? null,
     chosen: a.chosen === true,
   }));
 }
 
-/** Shape rules were schema-checked; here the TASK/CONVERSATION targets must exist in THIS workspace. */
+/** Shape rules were schema-checked; here the TASK/CONVERSATION/DECISION targets must exist in THIS workspace. */
 async function resolveReferences(
   workspaceId: string,
   input: CreateDecisionInput['references'],
 ): Promise<decisionRepo.ReferenceWrite[]> {
   const list = input ?? [];
   for (const r of list) {
-    if (r.type === 'TASK' || r.type === 'CONVERSATION') {
+    if (r.type === 'TASK' || r.type === 'CONVERSATION' || r.type === 'DECISION') {
       if (!r.entityId) {
-        throw badRequest('REFERENCE_TARGET_REQUIRED', 'A task/conversation reference needs a target');
+        throw badRequest(
+          'REFERENCE_TARGET_REQUIRED',
+          'A task/conversation/decision reference needs a target',
+        );
       }
       const ok = await decisionRepo.entityInWorkspace(r.type, r.entityId, workspaceId);
       if (!ok) {
-        throw badRequest('REFERENCE_TARGET_NOT_FOUND', 'The referenced task/conversation is not in this workspace');
+        throw badRequest(
+          'REFERENCE_TARGET_NOT_FOUND',
+          'The referenced entity is not in this workspace',
+        );
       }
     }
   }
@@ -186,10 +242,30 @@ async function resolveReferences(
 }
 
 /** Stable signature of the owned sets, used to decide whether a REPLACE actually changed anything. */
-function alternativesSignature(rows: readonly { label: string; description: string | null; chosen: boolean }[]): string {
-  return JSON.stringify(rows.map((a) => [a.label, a.description, a.chosen]));
+function alternativesSignature(
+  rows: readonly {
+    label: string;
+    description: string | null;
+    advantages: string | null;
+    disadvantages: string | null;
+    rejectionReason: string | null;
+    chosen: boolean;
+  }[],
+): string {
+  return JSON.stringify(
+    rows.map((a) => [
+      a.label,
+      a.description,
+      a.advantages,
+      a.disadvantages,
+      a.rejectionReason,
+      a.chosen,
+    ]),
+  );
 }
-function referencesSignature(rows: readonly { type: string; label: string; url: string | null; entityId: string | null }[]): string {
+function referencesSignature(
+  rows: readonly { type: string; label: string; url: string | null; entityId: string | null }[],
+): string {
   return JSON.stringify(rows.map((r) => [r.type, r.label, r.url, r.entityId]));
 }
 
@@ -217,28 +293,37 @@ export async function createDecision(
     }
   }
 
+  // The owner is the accountable person: defaults to the creator, may be any current member.
+  const ownerId = input.ownerId ?? caller.userId;
+  if (ownerId !== caller.userId) {
+    await requireMember(workspaceId, ownerId, 'The decision owner must be a workspace member');
+  }
+
   const alternatives = resolveAlternatives(input.alternatives);
   const references = await resolveReferences(workspaceId, input.references);
 
   const status = input.status ?? 'DRAFT';
   const history: HistoryWrite[] = [{ type: 'CREATED', message: 'Created this decision.' }];
-  if (status === 'IN_DISCUSSION') {
-    history.push({ type: 'STATUS_CHANGED', message: 'Started the discussion.' });
+  if (status === 'PROPOSED') {
+    history.push({ type: 'STATUS_CHANGED', message: 'Proposed this decision for review.' });
   }
 
   const row = await decisionRepo.createDecision({
     workspaceId,
     title: input.title,
+    summary: input.summary ?? null,
     background: input.background ?? null,
     decision: input.decision ?? null,
     rationale: input.rationale ?? null,
     consequences: input.consequences ?? null,
     status,
+    category: input.category ?? 'GENERAL',
     source: link.source,
     projectId: link.projectId,
     conversationId: link.conversationId,
     taskId: link.taskId,
     createdById: caller.userId,
+    ownerId,
     participantUserIds,
     alternatives,
     references,
@@ -268,9 +353,11 @@ export async function listDecisions(
     callerRole: caller.role,
     callerId: caller.userId,
     status: query.status,
+    category: query.category,
     projectId: query.projectId,
     source: query.source,
     participantId: query.participantId,
+    ownerId: query.ownerId,
     search: query.search && query.search.length > 0 ? query.search : undefined,
     sort: (query.sort ?? 'updatedAt') as DecisionSortField,
     dir: query.dir ?? 'desc',
@@ -310,7 +397,7 @@ export async function updateDecision(
     history.push({ type: 'UPDATED', message: 'Renamed this decision.' });
     changed = true;
   }
-  for (const field of ['background', 'decision', 'rationale', 'consequences'] as const) {
+  for (const field of ['summary', 'background', 'decision', 'rationale', 'consequences'] as const) {
     const next = input[field];
     if (next !== undefined && next !== row[field]) {
       data[field] = next ?? null;
@@ -318,7 +405,27 @@ export async function updateDecision(
       changed = true;
     }
   }
+  if (input.category !== undefined && input.category !== row.category) {
+    data.category = input.category;
+    history.push({ type: 'UPDATED', message: `Re-categorised as ${label(input.category)}.` });
+    changed = true;
+  }
+  if (input.ownerId !== undefined && input.ownerId !== row.owner.id) {
+    await requireMember(
+      workspaceId,
+      input.ownerId,
+      'The decision owner must be a workspace member',
+    );
+    data.ownerId = input.ownerId;
+    const who = await decisionRepo.getUserBrief(input.ownerId);
+    history.push({
+      type: 'OWNER_CHANGED',
+      message: who ? `Transferred ownership to ${who.name}.` : 'Transferred ownership.',
+    });
+    changed = true;
+  }
   if (input.status !== undefined && input.status !== row.status) {
+    requireTransition(row.status, input.status);
     data.status = input.status;
     history.push({
       type: 'STATUS_CHANGED',
@@ -359,27 +466,51 @@ export async function updateDecision(
 
 // ---- lifecycle ----
 
-export async function finalizeDecision(
+/** DRAFT / PROPOSED → APPROVED. Requires a non-empty decision statement (brief §3). */
+export async function approveDecision(
   decisionId: string,
   workspaceId: string,
   caller: Caller,
 ): Promise<DecisionDetailView> {
   const { row, canManage } = await loadDecision(decisionId, workspaceId, caller);
   requireManage(canManage);
-  if (row.status === 'FINALIZED') return toDecisionDetailView(row); // idempotent
+  if (row.status === 'APPROVED') return toDecisionDetailView(row); // idempotent
   requireEditable(row.status);
+  requireTransition(row.status, 'APPROVED');
   if (!row.decision || row.decision.trim().length === 0) {
     throw badRequest(
       'DECISION_STATEMENT_REQUIRED',
-      'Write the decision statement before finalizing',
+      'Write the decision statement before approving',
     );
   }
   const history: HistoryWrite[] = [
-    { type: 'STATUS_CHANGED', message: `Moved from ${label(row.status)} to Finalized.` },
-    { type: 'FINALIZED', message: 'Finalized this decision.' },
+    { type: 'STATUS_CHANGED', message: `Moved from ${label(row.status)} to Approved.` },
+    { type: 'APPROVED', message: 'Approved this decision.' },
   ];
   const updated = await decisionRepo.updateDecision(decisionId, workspaceId, caller.userId, {
-    data: { status: 'FINALIZED', finalizedAt: new Date() },
+    data: { status: 'APPROVED', approvedAt: new Date() },
+    history,
+  });
+  return toDecisionDetailView(updated);
+}
+
+/** PROPOSED → REJECTED. A rejected decision stays readable for historical reference. */
+export async function rejectDecision(
+  decisionId: string,
+  workspaceId: string,
+  caller: Caller,
+): Promise<DecisionDetailView> {
+  const { row, canManage } = await loadDecision(decisionId, workspaceId, caller);
+  requireManage(canManage);
+  if (row.status === 'REJECTED') return toDecisionDetailView(row); // idempotent
+  requireEditable(row.status);
+  requireTransition(row.status, 'REJECTED');
+  const history: HistoryWrite[] = [
+    { type: 'STATUS_CHANGED', message: `Moved from ${label(row.status)} to Rejected.` },
+    { type: 'REJECTED', message: 'Rejected this decision.' },
+  ];
+  const updated = await decisionRepo.updateDecision(decisionId, workspaceId, caller.userId, {
+    data: { status: 'REJECTED', rejectedAt: new Date() },
     history,
   });
   return toDecisionDetailView(updated);
@@ -394,6 +525,7 @@ export async function supersedeDecision(
   const { row, canManage } = await loadDecision(decisionId, workspaceId, caller);
   requireManage(canManage);
   requireEditable(row.status);
+  requireTransition(row.status, 'SUPERSEDED');
   if (byDecisionId === decisionId) {
     throw badRequest('SELF_SUPERSEDE', 'A decision cannot supersede itself');
   }
@@ -424,6 +556,7 @@ export async function archiveDecision(
   if (row.status === 'SUPERSEDED') {
     throw conflict('DECISION_LOCKED', 'A superseded decision cannot be archived');
   }
+  requireTransition(row.status, 'ARCHIVED');
   const history: HistoryWrite[] = [
     { type: 'STATUS_CHANGED', message: `Moved from ${label(row.status)} to Archived.` },
     { type: 'ARCHIVED', message: 'Archived this decision.' },
@@ -484,13 +617,10 @@ export async function addParticipant(
     await requireMember(workspaceId, userId, 'Participants must be workspace members');
   }
   const who = await decisionRepo.getUserBrief(userId);
-  await decisionRepo.addParticipant(
-    decisionId,
-    workspaceId,
-    caller.userId,
-    userId,
-    { type: 'PARTICIPANT_CHANGED', message: who ? `Added ${who.name} as a participant.` : 'Added a participant.' },
-  );
+  await decisionRepo.addParticipant(decisionId, workspaceId, caller.userId, userId, {
+    type: 'PARTICIPANT_CHANGED',
+    message: who ? `Added ${who.name} as a participant.` : 'Added a participant.',
+  });
   return getDecision(decisionId, workspaceId, caller);
 }
 
@@ -507,13 +637,10 @@ export async function removeParticipant(
   if (userId === row.createdBy.id) {
     throw badRequest('CREATOR_REQUIRED', 'The creator cannot be removed as a participant');
   }
-  await decisionRepo.removeParticipant(
-    decisionId,
-    workspaceId,
-    caller.userId,
-    userId,
-    { type: 'PARTICIPANT_CHANGED', message: 'Removed a participant.' },
-  );
+  await decisionRepo.removeParticipant(decisionId, workspaceId, caller.userId, userId, {
+    type: 'PARTICIPANT_CHANGED',
+    message: 'Removed a participant.',
+  });
   return getDecision(decisionId, workspaceId, caller);
 }
 
@@ -577,7 +704,10 @@ export async function deleteComment(
   const comment = await decisionRepo.findComment(commentId, decisionId, workspaceId);
   if (!comment) throw notFound('COMMENT_NOT_FOUND', 'Comment not found');
   if (comment.authorId !== caller.userId && !canManage) {
-    throw forbidden('INSUFFICIENT_ROLE', 'Only the author or a decision editor can remove a comment');
+    throw forbidden(
+      'INSUFFICIENT_ROLE',
+      'Only the author or a decision editor can remove a comment',
+    );
   }
   const deleted = await decisionRepo.deleteComment(commentId, decisionId);
   if (!deleted) throw notFound('COMMENT_NOT_FOUND', 'Comment not found');

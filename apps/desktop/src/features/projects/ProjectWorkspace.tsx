@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, FolderKanban, ListTodo, MessageSquare, Settings2 } from 'lucide-react';
+import { ArrowLeft, FolderKanban, ListTodo, MessageSquare, Scale, Settings2 } from 'lucide-react';
 import type { MemberSummary, ProjectView, WorkspaceRole } from '@buildtogether/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -9,6 +9,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/data';
 import { canManageProject } from '../../lib/rbac';
+import { ProjectDecisionsPanel } from '../decisions/ProjectDecisionsPanel';
 import { TasksPanel } from '../tasks/TasksPanel';
 import {
   formatProjectDate,
@@ -19,11 +20,12 @@ import {
 } from './projectUtils';
 import { ProjectSettingsPanel } from './ProjectSettingsPanel';
 
-type Tab = 'overview' | 'tasks' | 'conversations' | 'settings';
+type Tab = 'overview' | 'tasks' | 'decisions' | 'conversations' | 'settings';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; icon: typeof FolderKanban }> = [
   { id: 'overview', label: 'Overview', icon: FolderKanban },
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
+  { id: 'decisions', label: 'Decisions', icon: Scale },
   { id: 'conversations', label: 'Conversations', icon: MessageSquare },
   { id: 'settings', label: 'Settings', icon: Settings2 },
 ];
@@ -113,10 +115,14 @@ export function ProjectWorkspace({
     [project, role, userId],
   );
 
-  // Members feed the assignee pickers (Tasks + Settings). Viewers need the roster to assign at create;
-  // the server still validates membership on every write. Fetch lazily only when a tab uses it.
+  // Members feed the assignee pickers (Tasks + Settings) and the decision owner/participant pickers
+  // (Decisions). Viewers need the roster to act at create; the server still validates membership on
+  // every write. Fetch lazily only when a tab uses it.
   const roster = useResource<MemberSummary[]>(
-    () => (canManage || tab === 'tasks' ? api.members.list(workspaceId) : Promise.resolve([])),
+    () =>
+      canManage || tab === 'tasks' || tab === 'decisions'
+        ? api.members.list(workspaceId)
+        : Promise.resolve([]),
     [workspaceId, canManage, tab],
   );
 
@@ -188,6 +194,16 @@ export function ProjectWorkspace({
         />
       ) : null}
       {tab === 'conversations' ? <ConversationsPanel onOpenMessages={onOpenMessages} /> : null}
+      {tab === 'decisions' ? (
+        <ProjectDecisionsPanel
+          workspaceId={workspaceId}
+          project={project}
+          role={role}
+          members={roster.data ?? []}
+          userId={userId}
+          loadingMembers={roster.loading}
+        />
+      ) : null}
       {tab === 'settings' ? (
         roster.loading && canManage ? (
           <Skeleton className="h-40 w-full" />

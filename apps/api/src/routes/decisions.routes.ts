@@ -30,8 +30,13 @@ decisionsRouter.patch('/:decisionId', validate(updateDecisionSchema), controller
 decisionsRouter.delete('/:decisionId', controller.remove);
 
 // Lifecycle (dedicated endpoints so the history stays typed; PATCH cannot reach these states).
-decisionsRouter.post('/:decisionId/finalize', controller.finalize);
-decisionsRouter.post('/:decisionId/supersede', validate(supersedeDecisionSchema), controller.supersede);
+decisionsRouter.post('/:decisionId/approve', controller.approve);
+decisionsRouter.post('/:decisionId/reject', controller.reject);
+decisionsRouter.post(
+  '/:decisionId/supersede',
+  validate(supersedeDecisionSchema),
+  controller.supersede,
+);
 decisionsRouter.post('/:decisionId/archive', controller.archive);
 decisionsRouter.post('/:decisionId/restore', controller.restore);
 
@@ -44,7 +49,11 @@ decisionsRouter.post(
 decisionsRouter.delete('/:decisionId/participants/:userId', controller.removeParticipant);
 
 // History timeline + discussion comments (both paginated feeds).
-decisionsRouter.get('/:decisionId/history', validateQuery(decisionFeedQuerySchema), controller.history);
+decisionsRouter.get(
+  '/:decisionId/history',
+  validateQuery(decisionFeedQuerySchema),
+  controller.history,
+);
 decisionsRouter.get(
   '/:decisionId/comments',
   validateQuery(decisionFeedQuerySchema),

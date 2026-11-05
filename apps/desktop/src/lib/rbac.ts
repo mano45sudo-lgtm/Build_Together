@@ -1,4 +1,4 @@
-import type { ProjectView, WorkspaceRole } from '@buildtogether/shared';
+import type { DecisionView, ProjectView, WorkspaceRole } from '@buildtogether/shared';
 
 /**
  * Client-side visibility helpers ONLY. They hide actions the current role cannot perform so the UI
@@ -55,6 +55,25 @@ export function canManageProject(
 ): boolean {
   if (caller.role === 'OWNER' || caller.role === 'ADMIN') return true;
   return caller.userId === project.owner.id || caller.userId === project.createdById;
+}
+
+/**
+ * Decision management mirror (client-side visibility ONLY — the server is authoritative). Exactly
+ * `decision.service.loadDecision`'s `canManage`: a workspace OWNER/ADMIN, the decision's creator, its
+ * owner, or — when the decision is linked to a project — that project's manager. The optional
+ * `project` is supplied by the caller only when it already holds the linked project (the vault
+ * fetches the project list to resolve it); without it a plain MEMBER just sees the role/creator/owner
+ * subset, which is a smaller affordance, never a grant. The server re-checks on every write.
+ */
+export function canManageDecision(
+  decision: DecisionView,
+  caller: { role: WorkspaceRole; userId: string },
+  project?: ProjectView,
+): boolean {
+  if (caller.role === 'OWNER' || caller.role === 'ADMIN') return true;
+  if (caller.userId === decision.createdBy.id || caller.userId === decision.owner.id) return true;
+  if (project) return canManageProject(project, caller);
+  return false;
 }
 
 /**

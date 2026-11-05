@@ -19,14 +19,24 @@ const optionalText = (max: number, label: string) =>
 
 const optionalId = z.string().trim().min(1).max(64);
 
-const decisionStatusSchema = z.enum(['DRAFT', 'IN_DISCUSSION', 'FINALIZED', 'SUPERSEDED', 'ARCHIVED'], {
-  error: 'Status must be DRAFT, IN_DISCUSSION, FINALIZED, SUPERSEDED or ARCHIVED',
-});
+const decisionStatusSchema = z.enum(
+  ['DRAFT', 'PROPOSED', 'APPROVED', 'REJECTED', 'SUPERSEDED', 'ARCHIVED'],
+  { error: 'Status must be DRAFT, PROPOSED, APPROVED, REJECTED, SUPERSEDED or ARCHIVED' },
+);
 
 /** PATCH may only move between the two working states; the rest have dedicated endpoints. */
-const patchableStatusSchema = z.enum(['DRAFT', 'IN_DISCUSSION'], {
-  error: 'Status can only be set to DRAFT or IN_DISCUSSION here (use the lifecycle endpoints)',
+const patchableStatusSchema = z.enum(['DRAFT', 'PROPOSED'], {
+  error: 'Status can only be set to DRAFT or PROPOSED here (use the lifecycle endpoints)',
 });
+
+const decisionCategorySchema = z.enum([
+  'PRODUCT',
+  'DESIGN',
+  'ENGINEERING',
+  'BUSINESS',
+  'OPERATIONS',
+  'GENERAL',
+]);
 
 const decisionSourceSchema = z.enum(['PROJECT', 'CONVERSATION', 'TASK', 'MEETING', 'MANUAL']);
 
@@ -35,9 +45,12 @@ const createSourceSchema = z.enum(['MEETING', 'MANUAL'], {
   error: 'Source must be MEETING or MANUAL when no project/conversation/task link is given',
 });
 
-const referenceTypeSchema = z.enum(['DOCUMENT', 'LINK', 'TASK', 'CONVERSATION', 'FILE'], {
-  error: 'Reference type must be DOCUMENT, LINK, TASK, CONVERSATION or FILE',
-});
+const referenceTypeSchema = z.enum(
+  ['DOCUMENT', 'LINK', 'TASK', 'CONVERSATION', 'DECISION', 'FILE'],
+  {
+    error: 'Reference type must be DOCUMENT, LINK, TASK, CONVERSATION, DECISION or FILE',
+  },
+);
 
 /** http(s) only — a decision reference is a navigable link, never a script-capable scheme. */
 const referenceUrlSchema = z
@@ -49,6 +62,9 @@ const referenceUrlSchema = z
 const alternativeInputSchema = z.object({
   label: trimmed(1, 160, 'Alternative label'),
   description: optionalText(500, 'Alternative description'),
+  advantages: optionalText(1000, 'Advantages'),
+  disadvantages: optionalText(1000, 'Disadvantages'),
+  rejectionReason: optionalText(1000, 'Rejection reason'),
   chosen: z.boolean().optional(),
 });
 
@@ -61,10 +77,13 @@ const referenceInputSchema = z
   })
   .refine(
     (r) =>
-      (r.type === 'TASK' || r.type === 'CONVERSATION'
+      r.type === 'TASK' || r.type === 'CONVERSATION' || r.type === 'DECISION'
         ? r.entityId !== undefined && r.entityId !== null && r.url == null
-        : r.url !== undefined && r.url !== null && r.entityId == null),
-    { message: 'TASK/CONVERSATION references need an entityId; DOCUMENT/LINK/FILE references need a url' },
+        : r.url !== undefined && r.url !== null && r.entityId == null,
+    {
+      message:
+        'TASK/CONVERSATION/DECISION references need an entityId; DOCUMENT/LINK/FILE references need a url',
+    },
   );
 
 /** At most one context link may be present (a decision has exactly one originating context). */
@@ -72,16 +91,21 @@ const singleLinkRefine = (v: {
   projectId?: string | null | undefined;
   conversationId?: string | null | undefined;
   taskId?: string | null | undefined;
-}) => [v.projectId, v.conversationId, v.taskId].filter((id) => id !== undefined && id !== null).length <= 1;
+}) =>
+  [v.projectId, v.conversationId, v.taskId].filter((id) => id !== undefined && id !== null)
+    .length <= 1;
 
 export const createDecisionSchema = z
   .object({
     title: trimmed(1, 200, 'Decision title'),
+    summary: optionalText(500, 'Summary'),
     background: optionalText(4000, 'Background'),
     decision: optionalText(4000, 'Decision statement'),
     rationale: optionalText(4000, 'Rationale'),
     consequences: optionalText(4000, 'Consequences'),
     status: patchableStatusSchema.optional(),
+    category: decisionCategorySchema.optional(),
+    ownerId: optionalId.nullish(),
     source: createSourceSchema.optional(),
     projectId: optionalId.nullish(),
     conversationId: optionalId.nullish(),
@@ -90,27 +114,35 @@ export const createDecisionSchema = z
     alternatives: z.array(alternativeInputSchema).max(20, 'Too many alternatives').optional(),
     references: z.array(referenceInputSchema).max(20, 'Too many references').optional(),
   })
-  .refine(singleLinkRefine, { message: 'A decision links to at most one project, conversation or task' });
+  .refine(singleLinkRefine, {
+    message: 'A decision links to at most one project, conversation or task',
+  });
 
 export const updateDecisionSchema = z
   .object({
     title: trimmed(1, 200, 'Decision title').optional(),
+    summary: optionalText(500, 'Summary'),
     background: optionalText(4000, 'Background'),
     decision: optionalText(4000, 'Decision statement'),
     rationale: optionalText(4000, 'Rationale'),
     consequences: optionalText(4000, 'Consequences'),
     status: patchableStatusSchema.optional(),
+    category: decisionCategorySchema.optional(),
+    ownerId: optionalId.optional(),
     alternatives: z.array(alternativeInputSchema).max(20, 'Too many alternatives').optional(),
     references: z.array(referenceInputSchema).max(20, 'Too many references').optional(),
   })
   .refine(
     (v) =>
       v.title !== undefined ||
+      v.summary !== undefined ||
       v.background !== undefined ||
       v.decision !== undefined ||
       v.rationale !== undefined ||
       v.consequences !== undefined ||
       v.status !== undefined ||
+      v.category !== undefined ||
+      v.ownerId !== undefined ||
       v.alternatives !== undefined ||
       v.references !== undefined,
     { message: 'Provide at least one field to update' },
@@ -131,9 +163,11 @@ export const createDecisionCommentSchema = z.object({
 /** Query-string schema for the decision list (search / filter / sort / cursor pagination). */
 export const decisionListQuerySchema = z.object({
   status: decisionStatusSchema.optional(),
+  category: decisionCategorySchema.optional(),
   projectId: optionalId.optional(),
   source: decisionSourceSchema.optional(),
   participantId: optionalId.optional(),
+  ownerId: optionalId.optional(),
   search: z.string().trim().max(120, 'Search is too long').optional(),
   sort: z.enum(['createdAt', 'updatedAt', 'title', 'status']).optional(),
   dir: z.enum(['asc', 'desc']).optional(),

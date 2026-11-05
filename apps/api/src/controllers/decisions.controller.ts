@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
-import type { CreateDecisionInput, DecisionListQuery, UpdateDecisionInput } from '@buildtogether/shared';
+import type {
+  CreateDecisionInput,
+  DecisionListQuery,
+  UpdateDecisionInput,
+} from '@buildtogether/shared';
 import { forbidden, unauthorized } from '../errors/app-error.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { created, ok } from '../lib/respond.js';
@@ -37,7 +41,11 @@ function caller(req: Request): service.Caller & { workspaceId: string } {
 }
 
 /** Attach the forward cursor + applied limit to the envelope meta so clients paginate safely. */
-function sendPage(res: Response, result: { items: unknown[]; nextCursor: string | null }, query: { limit?: number }) {
+function sendPage(
+  res: Response,
+  result: { items: unknown[]; nextCursor: string | null },
+  query: { limit?: number },
+) {
   const meta = result.nextCursor
     ? { cursor: result.nextCursor, ...(query.limit ? { limit: query.limit } : {}) }
     : undefined;
@@ -65,7 +73,12 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
   const c = caller(req);
   ok(
     res,
-    await service.updateDecision(needDecisionId(req), c.workspaceId, c, req.body as UpdateDecisionInput),
+    await service.updateDecision(
+      needDecisionId(req),
+      c.workspaceId,
+      c,
+      req.body as UpdateDecisionInput,
+    ),
   );
 });
 
@@ -76,15 +89,23 @@ export const remove = asyncHandler(async (req: Request, res: Response) => {
 
 // ---- lifecycle ----
 
-export const finalize = asyncHandler(async (req: Request, res: Response) => {
+export const approve = asyncHandler(async (req: Request, res: Response) => {
   const c = caller(req);
-  ok(res, await service.finalizeDecision(needDecisionId(req), c.workspaceId, c));
+  ok(res, await service.approveDecision(needDecisionId(req), c.workspaceId, c));
+});
+
+export const reject = asyncHandler(async (req: Request, res: Response) => {
+  const c = caller(req);
+  ok(res, await service.rejectDecision(needDecisionId(req), c.workspaceId, c));
 });
 
 export const supersede = asyncHandler(async (req: Request, res: Response) => {
   const c = caller(req);
   const body = req.body as { byDecisionId: string };
-  ok(res, await service.supersedeDecision(needDecisionId(req), c.workspaceId, c, body.byDecisionId));
+  ok(
+    res,
+    await service.supersedeDecision(needDecisionId(req), c.workspaceId, c, body.byDecisionId),
+  );
 });
 
 export const archive = asyncHandler(async (req: Request, res: Response) => {
