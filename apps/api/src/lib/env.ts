@@ -34,6 +34,7 @@ export interface Env {
   authRateLimit: number;
   inviteRateLimit: number;
   chatRateLimit: number;
+  intelligenceRateLimit: number;
   publicAppBaseUrl: string;
   // Nexconn (ADR-0004). Optional in dev/test so the rest of the API boots without chat
   // credentials; the chat module fails closed when they are absent. App Secret is server-only;
@@ -68,6 +69,7 @@ export function loadEnv(): Env {
     authRateLimit: int('AUTH_RATE_LIMIT', 10),
     inviteRateLimit: int('INVITE_RATE_LIMIT', 30),
     chatRateLimit: int('CHAT_RATE_LIMIT', 60),
+    intelligenceRateLimit: int('INTELLIGENCE_RATE_LIMIT', 120),
     publicAppBaseUrl: str('PUBLIC_APP_BASE_URL', 'http://localhost:5173') as string,
     nexconnAppKey: str('NEXCONN_APP_KEY'),
     nexconnAppSecret: str('NEXCONN_APP_SECRET'),

@@ -62,7 +62,9 @@ prisma/          # schema.prisma + migrations
 - **Nexconn:** backend performs privileged operations and mints short-lived, user-scoped
   tokens for the client SDK (see `nexconn-integration.md`). No App Secret leaves the server.
 - **AI:** behind a provider-independent service interface in `services/ai`; provider keys
-  server-side; implemented in a later phase.
+  server-side. The **deterministic** execution-intelligence foundation ships now and works with
+  zero AI present; the optional AI context layer is a **deferred seam** (fails closed, no vendor
+  dependency committed) — see ADR-0005.
 
 ## Phase 2 surface (built)
 
@@ -100,8 +102,41 @@ the race backstop → `409`), and treats `archivedAt` as the sole archive marker
 the only layer touching Prisma; `lib/view.ts` maps rows to the `ProjectView` DTO. Covered by 21
 integration tests in `projects.test.ts` against real PG.
 
+## Phase 7 surface (built — deterministic execution intelligence)
+
+Versioned, validated, enveloped `/api/v1/workspaces/:workspaceId/intelligence` — the
+`intelligence.routes.ts` router is mounted with `mergeParams` **after** `authenticate` +
+`requireWorkspaceRole('MEMBER')` + a dedicated `intelligenceLimiter` (`INTELLIGENCE_RATE_LIMIT` /
+5 min), so the caller is a verified member of the **path** workspace before any signal is read.
+Operations: `GET /projects/:projectId/{overview,health,blockers,risks,recommendations,decision-impacts}`
+(personalized slices of one orchestrator pass), `GET /personal`, `POST /dismissals` and
+`DELETE /dismissals`. Query validation via `validateQuery(intelligenceQuerySchema)`
+(`deadlineWindowDays`, 1–90, defaults to the engine window); body validation via
+`validate(create|deleteDismissalSchema)`.
+
+`intelligence.service.ts` is the **sole orchestrator** and the only layer that reads persistence:
+`intelligence.repo.ts` is the **only** Prisma layer. Authorization is **reused, not reimplemented**
+— a project read is gated through `project.service.getProject` (a foreign or PRIVATE project the
+caller cannot see → **404**, a non-member → **403** via the mount), and personal intelligence reuses
+the already visibility-filtered `task.service.listMyTasks`. The engine itself is a set of **total,
+pure functions** (`services/intelligence/{common,health,blockers,risk,recommendations,impacts,
+personal}.ts`) over already-authorized signal rows plus an explicit `now` — no Prisma, no Express,
+no ambient clock — so every health state, blocker, risk and next-best-action is deterministic,
+explainable (WHAT/WHY/EVIDENCE/ACTION) and unit-testable. Nothing derived is stored; only
+`IntelligenceDismissal` (a user's `DISMISSED`/`RESOLVED` state on a signal, unique on
+`(workspaceId, userId, kind, dedupKey)`) and the `Notification` model persist (see ADR-0005). Dismiss
+hides an item from **that user's** list only — health is never dismissal-filtered and never rewritten.
+The `Notification` model + migration ship now; its producer/consumer wiring is deferred with the AI
+seam. Conversation-derived (AI) blocker detection is out of this increment — PostgreSQL stores no
+message bodies (Nexconn owns them). 13 engine unit tests + 6 HTTP integration tests cover health,
+blocker/risk/recommendation detection, decision-revision impact over the real Phase 6 supersede
+chain, workspace/project isolation, and dismissal dedup.
+
 ## Not yet built
 
-Tasks, conversation→task, decisions, AI, analytics, external integrations and payment all
-remain unbuilt (Phase 5+); the API holds none of their routes or tables. Projects are built
-(Phase 4), but there is no password reset yet (documented limitation, ADR-0003).
+After Phase 7 the API holds projects (Phase 4), tasks & dependencies (Phase 5), the Decision Vault
+(Phase 6) and the deterministic execution-intelligence surface above. Still unbuilt: the optional
+**AI context layer** (provider-independent seam, no vendor dependency committed — ADR-0005),
+**notification** producer/consumer endpoints (the `Notification` model exists but is not yet
+emitted/consumed), analytics, external integrations and payment. There is also no password reset yet
+(documented limitation, ADR-0003).

@@ -65,3 +65,6 @@ export * from './tasks';
 
 // ---- Phase 6 Decision Vault contracts (decisions, alternatives, references, comments, history) ----
 export * from './decisions';
+
+// ---- Phase 7 Execution Intelligence contracts (health, blockers, risks, recommendations, impacts) ----
+export * from './intelligence';

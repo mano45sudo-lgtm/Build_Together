@@ -193,6 +193,9 @@ model User {
   decisionParticipants   DecisionParticipant[]
   decisionHistory      DecisionHistory[]        @relation("DecisionHistoryActor")
   decisionComments     DecisionComment[]        @relation("DecisionCommentAuthor")
+  notificationsReceived Notification[]          @relation("NotificationRecipient")
+  notificationsCaused   Notification[]          @relation("NotificationActor")
+  intelligenceDismissals IntelligenceDismissal[] @relation("DismissalUser")
 
   @@index([status])
 }
@@ -238,6 +241,7 @@ model Workspace {
   projects    Project[]
   tasks       Task[]
   decisions   Decision[]
+  notifications Notification[]
 
   @@index([createdById])
 }
@@ -555,6 +559,104 @@ model DecisionHistory {
 
   @@index([decisionId, createdAt])
   @@index([workspaceId])
+}
+
+/// ---- Phase 7 Execution Intelligence (persisted user state + notifications) ----
+///
+/// The intelligence ENGINE is deterministic and computes health / blockers / risks / next-best-actions
+/// ON READ from real project, task, dependency and decision data — those derived insights are NEVER
+/// stored (database-engineering: prefer deriving over storing; they are time-sensitive and regenerate).
+/// Only two genuinely-durable things get a table here:
+///   1. `IntelligenceDismissal` — the user's confirm/dismiss/resolve decision on a computed signal,
+///      keyed by a STABLE dedup key so a dismissed recommendation does not resurface and regeneration
+///      de-duplicates against it. It stores no copy of the underlying task/decision data.
+///   2. `Notification` — a meaningful, DEDUPLICATED intelligence event (first-class model per the
+///      Phase 7 brief §7; the emission/producer wiring is a later increment).
+
+/// The intelligence signal kind a dismissal resolves against.
+enum InsightKind {
+  RECOMMENDATION
+  BLOCKER
+  RISK
+}
+
+/// How a user took a computed signal off their view. `RESOLVED` = handled it; `DISMISSED` = not
+/// relevant right now. Both hide the signal; neither mutates the underlying record (brief: never
+/// auto-execute a recommendation, never auto-change task status).
+enum DismissalState {
+  DISMISSED
+  RESOLVED
+}
+
+/// The intelligence event categories that produce a notification (Phase 7 brief §7). A closed
+/// vocabulary so dedup keys stay reliable and the UI can render per-kind affordances.
+enum NotificationKind {
+  TASK_BLOCKED
+  RISK_IDENTIFIED
+  DECISION_AFFECTS_TASK
+  DEADLINE_APPROACHING
+  INSIGHT
+}
+
+/// The kind of entity a notification deep-links to. Resolved workspace-side for navigation and
+/// authorization (a polymorphic FK is not expressible in the DB), mirroring `DecisionReference`.
+enum NotificationEntityType {
+  PROJECT
+  TASK
+  DECISION
+  CONVERSATION
+}
+
+/// A persisted user decision on a deterministically-generated signal. Unique per
+/// (workspace, user, kind, dedupKey): dismissing the same signal twice is idempotent, and the key is
+/// derived only from stable identity (entity id + reason code), never from volatile counts, so a
+/// regenerated signal reuses the same key. Cascade on user removal (a dismissed signal for a removed
+/// account is meaningless). The recipient's workspace scoping is the isolation boundary.
+model IntelligenceDismissal {
+  id          String         @id @default(cuid())
+  workspaceId String
+  userId      String
+  user        User           @relation("DismissalUser", fields: [userId], references: [id], onDelete: Cascade)
+  kind        InsightKind
+  dedupKey    String
+  state       DismissalState @default(DISMISSED)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([workspaceId, userId, kind, dedupKey])
+  @@index([workspaceId, userId])
+}
+
+/// A first-class intelligence notification to one workspace member (Phase 7 brief §7). Meaningful +
+/// DEDUPLICATED: `dedupKey` is unique per (workspace, recipient), so a repeated event (the same task
+/// blocking again, the same risk re-scanned) does not spam a second row. `readAt`/`dismissedAt` carry
+/// lifecycle (both null = active). Navigation target is polymorphic (`entityType`/`entityId`) and
+/// validated workspace-side. Recipient cascade (a removed member's inbox is meaningless); optional
+/// actor SetNull (a notification outlives the account that caused it). History is retained — rows are
+/// never deleted on read/dismiss.
+model Notification {
+  id         String               @id @default(cuid())
+  workspaceId String
+  workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User                 @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  kind       NotificationKind
+  dedupKey   String
+  title      String
+  body       String?
+  entityType NotificationEntityType?
+  entityId   String?
+  actorId    String?
+  actor      User?                @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  readAt     DateTime?
+  dismissedAt DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([workspaceId, userId, dedupKey])
+  @@index([workspaceId, userId, createdAt])
+  @@index([userId, readAt])
+  @@index([workspaceId, kind])
 }
 
 // ---- Real-time communication (Phase 3 — application metadata only, no message bodies) ----

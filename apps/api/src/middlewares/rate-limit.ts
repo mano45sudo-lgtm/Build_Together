@@ -75,3 +75,27 @@ export function makeChatLimiter(limit: number = env.chatRateLimit): RequestHandl
 
 /** Default chat limiter instance for mounting. */
 export const chatLimiter: RequestHandler = makeChatLimiter();
+
+/**
+ * Execution-intelligence limiter (Phase 7 read aggregates + dismissal writes): max
+ * INTELLIGENCE_RATE_LIMIT / 5 min per IP. These are derived-on-read views the desktop may poll, so
+ * the ceiling is generous but bounded to keep abusive fan-out off the database. Counts ALL requests.
+ */
+export function makeIntelligenceLimiter(limit: number = env.intelligenceRateLimit): RequestHandler {
+  return rateLimit({
+    windowMs: 5 * 60 * 1000,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: {
+      data: null,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many intelligence requests, please slow down',
+      },
+    },
+  });
+}
+
+/** Default intelligence limiter instance for mounting. */
+export const intelligenceLimiter: RequestHandler = makeIntelligenceLimiter();

@@ -80,6 +80,8 @@ export class TestApi {
 
 /** Wipe all Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 6 tables in FK-safe order (children before parents). */
 export async function resetDb(): Promise<void> {
+  await prisma.notification.deleteMany(); // recipient/actor/workspace refs -> clear before users & workspaces
+  await prisma.intelligenceDismissal.deleteMany(); // user refs cascade, but clear explicitly for order
   await prisma.decisionHistory.deleteMany(); // actor is onDelete Restrict -> clear before users
   await prisma.decisionComment.deleteMany(); // author is onDelete Restrict -> clear before users
   await prisma.decisionParticipant.deleteMany();

@@ -3,6 +3,8 @@ import { authRouter } from './auth.routes.js';
 import { invitationsRouter } from './invitations.routes.js';
 import { projectsRouter } from './projects.routes.js';
 import { decisionsRouter } from './decisions.routes.js';
+import { intelligenceRouter } from './intelligence.routes.js';
+import { intelligenceLimiter } from '../middlewares/rate-limit.js';
 import { tasksRouter } from './tasks.routes.js';
 import { usersRouter } from './users.routes.js';
 import { workspacesRouter } from './workspaces.routes.js';
@@ -49,6 +51,19 @@ v1Router.use(
   authenticate,
   requireWorkspaceRole('MEMBER'),
   decisionsRouter,
+);
+
+// Phase 7 execution intelligence. Workspace-scoped exactly like projects/tasks/decisions: the mount
+// point proves membership fresh from the DB; the orchestrator then re-checks project visibility per
+// request before computing any signal. Every endpoint is a derived READ (plus the caller's own
+// dismissal writes) — it can never mutate a task/decision. Distinct /intelligence prefix, so no path
+// collides with /projects…, /tasks…, /decisions… or /conversations…. Throttled by its own limiter.
+v1Router.use(
+  '/workspaces/:workspaceId/intelligence',
+  authenticate,
+  requireWorkspaceRole('MEMBER'),
+  intelligenceLimiter,
+  intelligenceRouter,
 );
 
 // Phase 3 chat. Mounted AFTER workspacesRouter so its `/:workspaceId/...` sub-paths (chat token,

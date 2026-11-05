@@ -5,6 +5,77 @@ completion report; this log is the durable summary.
 
 ---
 
+## Phase 7 — Execution Intelligence Engine _(deterministic foundation)_
+
+**Date:** 2026-11-05 · **Status:** deterministic backend foundation complete & verified (all gates
+green); AI seam + notification wiring + desktop surfaces **deferred, pending authorization** ·
+**Scope:** contextual, explainable intelligence layered on the existing project / task / conversation /
+Decision-Vault infrastructure — **not** a generic AI chatbot. Ships explainable project health, structured
+blocker detection, deadline & risk intelligence, next-best-actions, decision-revision impact, and personal
+execution intelligence as **pure, deterministic** signals that work with **zero AI** present. **No
+future-phase features were begun**; no vendor dependency committed.
+
+### Work completed
+
+- **Data layer** — one additive, **non-destructive** migration `20261105042725_add_execution_intelligence`
+  (7 migrations total, `prisma migrate status` up-to-date). It adds **only** the two genuinely durable
+  things: `IntelligenceDismissal` (a user's `DISMISSED`/`RESOLVED` state on a computed signal, unique on
+  `(workspaceId, userId, kind, dedupKey)`) and a first-class workspace-scoped `Notification`
+  (`dedup` unique on `(workspaceId, userId, dedupKey)`, inbox indexes), plus `InsightKind`/
+  `DismissalState`/`NotificationKind`/`NotificationEntityType` enums. **Nothing derived is stored** —
+  health/blockers/risks/recommendations/impacts are computed on read so a snapshot can never drift
+  (ADR-0005). No prior-phase data touched.
+- **Deterministic rules engine** (`apps/api/src/services/intelligence/*`) — total **pure functions** over
+  already-authorized signal rows plus an explicit `now` (no Prisma, no Express, no ambient clock), so every
+  output is reproducible and unit-testable: `common.ts` (every threshold lives once), `health.ts`
+  (`computeMetrics` → `computeHealth`, state = **worst severity** among documented factors → `AT_RISK` /
+  `NEEDS_ATTENTION` / `ON_TRACK`, never an arbitrary score), `blockers.ts` (structured sources only —
+  unfinished/overdue prerequisite, awaiting a decision, a decision needing review; **reuses** the derived
+  unfinished-prerequisite relationship, never mutates a task; the brief's "unresolved clarification" source
+  is **honestly omitted** as no such entity exists), `risk.ts` (LOW/MEDIUM/HIGH, each carrying
+  WHAT/WHY/EVIDENCE/ACTION), `recommendations.ts` (next-best-actions derived from an already-detected
+  signal, deduplicated + priority-sorted, never auto-executed), `impacts.ts` (built entirely on the Phase 6
+  supersede chain — a `SUPERSEDED` decision's linked **live** tasks may need review; deleted tasks skipped,
+  never invented; no auto-rewrite), `personal.ts` (buckets the caller's own visible work —
+  `overdue`/`upcoming`/`blocked`/`awaitingMyReview`).
+- **Module** (layered route→middleware→controller→service→repo, **only the repo touches Prisma**) —
+  `intelligence.service.ts` is the **sole orchestrator**; `intelligence.repo.ts` the only Prisma layer;
+  thin `intelligence.controller.ts`; `intelligence.routes.ts` mounted with `mergeParams` at
+  `/api/v1/workspaces/:workspaceId/intelligence` **after** `authenticate` + `requireWorkspaceRole('MEMBER')`
+  - a dedicated `intelligenceLimiter` (`INTELLIGENCE_RATE_LIMIT` / 5 min). Endpoints:
+    `GET /projects/:projectId/{overview,health,blockers,risks,recommendations,decision-impacts}`,
+    `GET /personal`, `POST /dismissals`, `DELETE /dismissals`. zod at the edge
+    (`intelligence.schemas.ts`: `deadlineWindowDays` 1–90 via `validateQuery`; dismiss/undismiss via
+    `validate`). `{ data, error, meta }` envelope throughout.
+- **Authorization reuse (no parallel services)** — a project read is gated through the **existing**
+  `project.service.getProject` (a foreign or PRIVATE project the caller cannot see → **404**, a non-member
+  → **403** via the mount); personal intelligence reuses the already visibility-filtered
+  `task.service.listMyTasks`. Dismissing hides an item from **that user's** list only — health is never
+  dismissal-filtered and never rewritten.
+- **Shared contracts** — `packages/shared/src/intelligence.ts` (health/blocker/risk/recommendation/
+  decision-impact/personal DTOs + dismissal inputs), exported from the barrel.
+
+### Gates (real infrastructure)
+
+Typecheck **0**, production build `tsc -p tsconfig.build.json` **0**, eslint **clean**,
+prettier **0**, full vitest suite **182 tests / 11 files pass** (13 new engine unit tests +
+6 new HTTP integration tests against real PostgreSQL, covering health, blocker/risk/recommendation
+detection, decision-revision impact over the real Phase 6 supersede chain, workspace/project isolation,
+and dismissal dedup).
+
+### Honest gaps (deferred by authorized scope — not oversights)
+
+- **AI context layer (§4)** — deferred provider-independent seam (fails closed, no vendor dependency
+  committed); the product works fully with no model configured. `.env.example` carries inert
+  `AI_PROVIDER`/`AI_API_KEY` placeholders.
+- **Notifications** — the model + migration ship now; the producer/consumer endpoints that emit and
+  serve them land in a later increment.
+- **Conversation-derived blocker detection** — needs the deferred AI seam; PostgreSQL stores no message
+  bodies (Nexconn owns them), so it is out of this deterministic increment.
+- **Desktop surfaces (§8)** — the `/intelligence` renderer UI is deferred to the next authorized increment.
+
+---
+
 ## Phase 6 — Decision Vault
 
 **Date:** 2026-11-05 · **Status:** Complete & verified (all gates green) · **Scope:** the project

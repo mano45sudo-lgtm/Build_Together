@@ -16,6 +16,7 @@ process.env.SESSION_SECRET ??= 'test-only-insecure-secret';
 process.env.AUTH_RATE_LIMIT ??= '100000';
 process.env.INVITE_RATE_LIMIT ??= '100000';
 process.env.CHAT_RATE_LIMIT ??= '100000';
+process.env.INTELLIGENCE_RATE_LIMIT ??= '100000';
 // Non-secret placeholders so the chat module's fail-closed guards (which only check PRESENCE of the
 // App Key/Secret) let the mocked-provider tests exercise token minting and callback verification.
 // These are NOT real credentials — no provider call is ever made (a fake provider is injected).

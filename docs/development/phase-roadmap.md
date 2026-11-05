@@ -144,15 +144,26 @@ test, build) green.**
 
 **Team Pulse — not started (needs authorization).** Activity/progress signals across the workspace.
 
-## Phase 7 — AI layer _(not authorized)_
+## Phase 7 — Execution Intelligence Engine
 
-Provider-independent server-side abstraction; conversation summaries; action extraction that
-**proposes** tasks/decisions for user confirmation (no silent writes). Closes R8.
+Contextual, deterministic, **explainable** intelligence on top of the existing project / task /
+conversation / Decision-Vault layers — explicitly **not** a generic AI chatbot. The **deterministic
+foundation** is built and checkpointed: pure rules-engine detectors for project health
+(On Track / Needs Attention / At Risk), structured blocker detection, deadline & risk intelligence
+(WHAT/WHY/EVIDENCE/ACTION), next-best-actions, decision-revision impact (on the Phase 6 supersede
+chain), and personal execution intelligence — exposed via the workspace-scoped `/intelligence` API,
+with compute-on-read signals and only `IntelligenceDismissal` + `Notification` persisted
+(see [ADR-0005](../decisions/ADR-0005-execution-intelligence.md)).
+
+**Deferred within Phase 7 (pending confirmation):** the optional provider-independent **AI context
+layer** (conversation summaries, action extraction that **proposes** — never silently writes), the
+`Notification` producer/consumer wiring, and the desktop surfaces. No vendor dependency committed.
 
 ## Later / candidate (only with product reason)
 
-Notifications, search, attachments policy, external integrations, mobile. Not scheduled;
-require an explicit decision + ADR.
+Search, attachments policy, external integrations, mobile. Not scheduled;
+require an explicit decision + ADR. (The `Notification` **model** now ships as part of Phase 7 per
+ADR-0005; only its producer/consumer wiring remains a later candidate.)
 
 ## Rules across all phases
 
@@ -162,13 +173,13 @@ require an explicit decision + ADR.
 
 ## Status tracker
 
-| Phase | State                                           |
-| ----- | ----------------------------------------------- |
-| 0     | Complete                                        |
-| 1     | Complete (desktop foundation)                   |
-| 2     | Complete (identity, workspaces & teams)         |
-| 3     | Complete (real-time communication)              |
-| 4     | Complete (projects & project structure)         |
-| 5     | Complete (task management & dependencies)       |
-| 6     | Decision Vault complete; Team Pulse not started |
-| 7     | Not started / not authorized                    |
+| Phase | State                                                                               |
+| ----- | ----------------------------------------------------------------------------------- |
+| 0     | Complete                                                                            |
+| 1     | Complete (desktop foundation)                                                       |
+| 2     | Complete (identity, workspaces & teams)                                             |
+| 3     | Complete (real-time communication)                                                  |
+| 4     | Complete (projects & project structure)                                             |
+| 5     | Complete (task management & dependencies)                                           |
+| 6     | Decision Vault complete; Team Pulse not started                                     |
+| 7     | Deterministic foundation complete; AI seam + notification wiring + desktop deferred |
