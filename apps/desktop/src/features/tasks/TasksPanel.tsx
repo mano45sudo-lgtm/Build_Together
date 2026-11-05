@@ -295,6 +295,7 @@ export function TasksPanel({
       ) : tasks.length === 0 ? (
         <EmptyState
           icon={ListIcon}
+          visual={filtersActive ? undefined : 'board'}
           title={filtersActive ? 'No tasks match your filters' : 'No tasks yet'}
           description={
             filtersActive

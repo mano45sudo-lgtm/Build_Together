@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import type {
   CreateDecisionInput,
   DecisionCategory,
@@ -293,11 +292,10 @@ export function CreateDecisionDialog({
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" onClick={close} disabled={submitting}>
+          <Button variant="outline" onClick={close} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting || title.trim().length === 0}>
-            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          <Button type="submit" loading={submitting} disabled={title.trim().length === 0}>
             Create decision
           </Button>
         </div>

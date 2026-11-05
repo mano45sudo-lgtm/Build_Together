@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Hammer, Loader2 } from 'lucide-react';
+import { Hammer } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Input } from '../../components/ui/Input';
+import { BrandMarkBackground, SoftLighting } from '../../components/visuals';
 import { errorMessage } from '../../lib/bridge';
 import { useAuth } from '../../state/AuthProvider';
 
@@ -57,12 +58,16 @@ export function WelcomeScreen() {
   };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-canvas px-6 py-12 text-primary">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-canvas px-6 py-12 text-primary">
+      {/* Brand moment: an oversized ghost of the actual BuildTogether mark in the lower-right negative
+          space, with a whisper of top lighting. Decorative only — the form sits above it at z-10. */}
+      <BrandMarkBackground size={420} className="-right-16 -bottom-16" />
+      <SoftLighting position="top" size="70% 60%" />
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-        className="w-full max-w-sm"
+        className="relative z-10 w-full max-w-sm"
       >
         <div className="mb-8 flex items-center gap-2.5">
           <div className="flex size-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-2">
@@ -145,8 +150,7 @@ export function WelcomeScreen() {
             />
           </Field>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          <Button type="submit" className="w-full" loading={submitting}>
             {isSignup ? 'Create account' : 'Sign in'}
           </Button>
         </form>

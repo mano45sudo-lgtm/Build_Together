@@ -33,6 +33,7 @@
   /* ---- Accent (primary action = light) ---- */
   --color-accent: #fafafa;
   --color-accent-hover: #e4e4e7;
+  --color-accent-active: #d4d4d8; /* pressed */
   --color-accent-foreground: #090909;
 
   /* ---- Status (the only hues; restrained, meaning-only) ---- */
@@ -40,6 +41,27 @@
   --color-warning: #fbbf24;
   --color-danger: #f87171;
   --color-info: #a1a1aa; /* neutral — monochrome interface, no blue */
+
+  /* ---- Button fills (solid semantic actions; white/dark label on a 600 shade) ----
+   * Distinct from the light status tokens above (those are text/indicators on dark).
+   * These are the approved Monochrome-Precision button-system fills. */
+  --color-success-fill: #16a34a;
+  --color-success-fill-hover: #15803d;
+  --color-danger-fill: #dc2626;
+  --color-danger-fill-hover: #b91c1c;
+  --color-warning-fill: #f59e0b;
+  --color-warning-fill-hover: #d97706;
+  --color-warning-fill-foreground: #171717; /* amber is light — dark label for contrast */
+
+  /* ---- Decorative background graphics (Monochrome Precision visual system) ----
+   * Neutral-only lighting & geometry. Every graphic layer draws from this single restraint
+   * budget so nothing is ever loud, and no hue is introduced. Consumed via var() in
+   * components/visuals/*. */
+  --graphic-ghost: 0.035; /* oversized brand mark — barely there */
+  --graphic-plate: 0.05; /* diagonal layer surface fill */
+  --graphic-line: 0.07; /* hairline strokes: grid, arcs, plate edges */
+  --graphic-light: 0.06; /* radial soft-illumination peak */
+  --graphic-grid: 32px; /* fine grid cell size */
 
   /* ---- Typography ---- */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

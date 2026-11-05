@@ -341,6 +341,7 @@ export function DecisionsScreen() {
         ) : (
           <EmptyState
             icon={Scale}
+            visual="decision"
             title="No decisions yet"
             description="Record your first decision to give this workspace a durable, traceable history."
             action={

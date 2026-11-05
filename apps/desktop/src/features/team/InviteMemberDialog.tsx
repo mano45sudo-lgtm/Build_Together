@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, Loader2 } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import type { CreatedInvitation, WorkspaceRole } from '@buildtogether/shared';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
@@ -157,11 +157,10 @@ export function InviteMemberDialog({
         ) : null}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" onClick={close} disabled={submitting}>
+          <Button variant="outline" onClick={close} disabled={submitting}>
             {result ? 'Done' : 'Cancel'}
           </Button>
-          <Button type="submit" disabled={submitting || email.trim().length === 0}>
-            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          <Button type="submit" loading={submitting} disabled={email.trim().length === 0}>
             Send invitation
           </Button>
         </div>

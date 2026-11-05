@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CircleSlash, Link2, Loader2, Trash2, Unlink } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CircleSlash, Link2, Trash2, Unlink } from 'lucide-react';
 import type {
   MemberSummary,
   TaskActivityView,
@@ -189,12 +189,8 @@ export function TaskDetail({
           Back to tasks
         </Button>
         {canManage ? (
-          <Button variant="destructive" size="sm" onClick={removeTask} disabled={busy === 'delete'}>
-            {busy === 'delete' ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Trash2 className="size-3.5" aria-hidden="true" />
-            )}
+          <Button variant="destructive" size="sm" onClick={removeTask} loading={busy === 'delete'}>
+            {busy !== 'delete' ? <Trash2 className="size-3.5" aria-hidden="true" /> : null}
             Delete
           </Button>
         ) : null}

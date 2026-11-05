@@ -8,7 +8,6 @@ import { Field } from '../../components/ui/Field';
 import { Input } from '../../components/ui/Input';
 import { Alert } from '../../components/ui/Alert';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { Spinner } from '../../components/ui/Spinner';
 import { errorMessage } from '../../lib/bridge';
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/data';
@@ -224,11 +223,10 @@ export function NewConversationDialog({
         ) : null}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={!valid || submitting}>
-            {submitting ? <Spinner className="size-4" /> : null}
+          <Button onClick={() => void submit()} loading={submitting} disabled={!valid}>
             Create
           </Button>
         </div>

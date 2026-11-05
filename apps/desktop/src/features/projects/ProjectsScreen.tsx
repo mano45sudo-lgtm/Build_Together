@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { SoftLighting, SubtleGrid } from '../../components/visuals';
 import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/data';
 import { useAuth } from '../../state/AuthProvider';
@@ -76,8 +77,14 @@ export function ProjectsScreen({ onOpenMessages }: { onOpenMessages: () => void 
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="relative flex flex-wrap items-end justify-between gap-3">
+        {/* Minimal header accent only — a fading grid + a whisper of lighting behind the title.
+            Project rows and cards below deliberately stay plain and content-focused. */}
+        <div className="pointer-events-none absolute inset-0">
+          <SubtleGrid fade="bottom" />
+          <SoftLighting position="top-left" />
+        </div>
+        <div className="relative z-10">
           <h1 className="text-display">Projects</h1>
           <p className="mt-1 text-sm text-secondary">
             Organize the work of{' '}
@@ -85,7 +92,7 @@ export function ProjectsScreen({ onOpenMessages }: { onOpenMessages: () => void 
             lives inside this workspace and its access is enforced by the server.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
+        <Button className="relative z-10" onClick={() => setCreating(true)}>
           <Plus className="size-4" aria-hidden="true" />
           New project
         </Button>
@@ -170,12 +177,14 @@ export function ProjectsScreen({ onOpenMessages }: { onOpenMessages: () => void 
             icon={FolderKanban}
             title="No archived projects"
             description="When you archive a project it will appear here."
+            visual="generic"
           />
         ) : (
           <EmptyState
             icon={FolderKanban}
             title="No projects yet"
             description="Create your first project to start organizing work in this workspace."
+            visual="workspace"
             action={
               <Button size="sm" onClick={() => setCreating(true)}>
                 <Plus className="size-4" aria-hidden="true" />

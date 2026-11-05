@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Loader2, LogOut, Save } from 'lucide-react';
+import { KeyRound, LogOut, Save } from 'lucide-react';
 import { Alert } from '../../components/ui/Alert';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge, roleTone } from '../../components/ui/Badge';
@@ -104,12 +104,8 @@ function ProfileCard() {
         </Field>
 
         <div className="flex justify-end">
-          <Button onClick={() => void save()} disabled={busy || !dirty}>
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Save className="size-4" aria-hidden="true" />
-            )}
+          <Button onClick={() => void save()} loading={busy} disabled={!dirty}>
+            {!busy ? <Save className="size-4" aria-hidden="true" /> : null}
             Save changes
           </Button>
         </div>
@@ -178,12 +174,8 @@ function SecurityCard() {
         </Field>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy || current.length === 0 || next.length === 0}>
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <KeyRound className="size-4" aria-hidden="true" />
-            )}
+          <Button type="submit" loading={busy} disabled={current.length === 0 || next.length === 0}>
+            {!busy ? <KeyRound className="size-4" aria-hidden="true" /> : null}
             Change password
           </Button>
         </div>
@@ -265,12 +257,8 @@ function WorkspaceCard() {
         </Field>
 
         <div className="flex justify-end">
-          <Button onClick={() => void save()} disabled={!editable || busy || !dirty}>
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Save className="size-4" aria-hidden="true" />
-            )}
+          <Button onClick={() => void save()} loading={busy} disabled={!editable || !dirty}>
+            {!busy ? <Save className="size-4" aria-hidden="true" /> : null}
             Save changes
           </Button>
         </div>

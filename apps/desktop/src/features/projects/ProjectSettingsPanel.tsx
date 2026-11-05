@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, Loader2 } from 'lucide-react';
+import { Archive, ArchiveRestore } from 'lucide-react';
 import type { MemberSummary, ProjectView, UpdateProjectInput } from '@buildtogether/shared';
 import { PROJECT_STATUSES, PROJECT_VISIBILITIES } from '@buildtogether/shared';
 import { Alert } from '../../components/ui/Alert';
@@ -8,7 +8,6 @@ import { Card } from '../../components/ui/Card';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { Input } from '../../components/ui/Input';
-import { Spinner } from '../../components/ui/Spinner';
 import { errorMessage } from '../../lib/bridge';
 import { api } from '../../lib/data';
 import { projectStatusLabel, projectVisibilityLabel } from './projectUtils';
@@ -246,8 +245,7 @@ export function ProjectSettingsPanel({
           </Field>
 
           <div className="flex justify-end">
-            <Button onClick={() => void save()} disabled={saving || !dirty || !nameValid}>
-              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            <Button onClick={() => void save()} loading={saving} disabled={!dirty || !nameValid}>
               Save changes
             </Button>
           </div>
@@ -286,11 +284,10 @@ export function ProjectSettingsPanel({
         }
       >
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setConfirm(null)} disabled={busy}>
+          <Button variant="outline" onClick={() => setConfirm(null)} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => void runArchive()} disabled={busy}>
-            {busy ? <Spinner className="size-4" /> : null}
+          <Button onClick={() => void runArchive()} loading={busy}>
             {confirm === 'archive' ? 'Archive' : 'Restore'}
           </Button>
         </div>

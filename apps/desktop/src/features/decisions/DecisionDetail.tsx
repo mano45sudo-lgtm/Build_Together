@@ -3,7 +3,6 @@ import {
   Archive,
   Check,
   Link2,
-  Loader2,
   Plus,
   RotateCcw,
   Send,
@@ -227,13 +226,9 @@ export function DecisionDetail({
             variant="destructive"
             size="sm"
             onClick={removeDecision}
-            disabled={busy === 'delete'}
+            loading={busy === 'delete'}
           >
-            {busy === 'delete' ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Trash2 className="size-3.5" aria-hidden="true" />
-            )}
+            {busy !== 'delete' ? <Trash2 className="size-3.5" aria-hidden="true" /> : null}
             Delete
           </Button>
         ) : null}
@@ -615,8 +610,6 @@ function LifecycleBar({
   onRestore: () => void;
 }) {
   const status = decision.status;
-  const spinner = (key: string) =>
-    busy === key ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : null;
   const showSupersede = canSupersede(status) && candidates.length > 0;
 
   return (
@@ -624,8 +617,13 @@ function LifecycleBar({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           {canPropose(status) ? (
-            <Button size="sm" variant="secondary" onClick={onPropose} disabled={busy !== null}>
-              {spinner('propose')}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onPropose}
+              disabled={busy !== null}
+              loading={busy === 'propose'}
+            >
               <Send className="size-3.5" aria-hidden="true" />
               Propose for review
             </Button>
@@ -639,34 +637,50 @@ function LifecycleBar({
           {canApprove(status) ? (
             <Button
               size="sm"
+              variant="success"
               onClick={onApprove}
               disabled={busy !== null || !statementPresent}
+              loading={busy === 'approve'}
               title={
                 !statementPresent ? 'Write the decision statement before approving' : undefined
               }
             >
-              {spinner('approve')}
               <Check className="size-3.5" aria-hidden="true" />
               Approve
             </Button>
           ) : null}
           {canReject(status) ? (
-            <Button size="sm" variant="destructive" onClick={onReject} disabled={busy !== null}>
-              {spinner('reject')}
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={onReject}
+              disabled={busy !== null}
+              loading={busy === 'reject'}
+            >
               <X className="size-3.5" aria-hidden="true" />
               Reject
             </Button>
           ) : null}
           {canArchive(status) ? (
-            <Button size="sm" variant="ghost" onClick={onArchive} disabled={busy !== null}>
-              {spinner('archive')}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onArchive}
+              disabled={busy !== null}
+              loading={busy === 'archive'}
+            >
               <Archive className="size-3.5" aria-hidden="true" />
               Archive
             </Button>
           ) : null}
           {canRestore(status) ? (
-            <Button size="sm" variant="secondary" onClick={onRestore} disabled={busy !== null}>
-              {spinner('restore')}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onRestore}
+              disabled={busy !== null}
+              loading={busy === 'restore'}
+            >
               <RotateCcw className="size-3.5" aria-hidden="true" />
               Restore
             </Button>
@@ -697,8 +711,8 @@ function LifecycleBar({
               variant="secondary"
               onClick={onSupersede}
               disabled={!supersedeTarget || busy !== null}
+              loading={busy === 'supersede'}
             >
-              {spinner('supersede')}
               Supersede
             </Button>
           </div>
@@ -888,11 +902,10 @@ function AlternativesCard({
             Add alternative
           </Button>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button size="sm" onClick={save} disabled={busy}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            <Button size="sm" onClick={save} loading={busy}>
               Save alternatives
             </Button>
           </div>
@@ -1075,11 +1088,10 @@ function ReferencesCard({
             Add reference
           </Button>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button size="sm" onClick={save} disabled={busy}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            <Button size="sm" onClick={save} loading={busy}>
               Save references
             </Button>
           </div>
@@ -1193,8 +1205,7 @@ function CommentsCard({
             maxLength={2000}
           />
           <div className="flex justify-end">
-            <Button type="submit" size="sm" disabled={busy || body.trim().length === 0}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            <Button type="submit" size="sm" loading={busy} disabled={body.trim().length === 0}>
               Comment
             </Button>
           </div>

@@ -9,7 +9,6 @@ import { Card } from '../../components/ui/Card';
 import { Dialog } from '../../components/ui/Dialog';
 import { Dropdown } from '../../components/ui/Dropdown';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { Spinner } from '../../components/ui/Spinner';
 import { errorMessage } from '../../lib/bridge';
 import { api } from '../../lib/data';
 import { canChangeRole, canManageTeam, canRemove, canTransferTo } from '../../lib/rbac';
@@ -227,15 +226,14 @@ export function MembersPanel({
           </p>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setPending(null)} disabled={busy}>
+          <Button variant="outline" onClick={() => setPending(null)} disabled={busy}>
             Cancel
           </Button>
           <Button
-            variant={pending?.kind === 'transfer' ? 'primary' : 'secondary'}
+            variant={pending?.kind === 'transfer' ? 'primary' : 'destructive'}
             onClick={() => void runPending()}
-            disabled={busy}
+            loading={busy}
           >
-            {busy ? <Spinner className="size-4" /> : null}
             {pending?.kind === 'transfer'
               ? `Transfer to ${pending?.member.name ?? ''}`
               : pending?.member.userId === selfId

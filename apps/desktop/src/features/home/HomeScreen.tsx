@@ -6,6 +6,7 @@ import { Badge, roleTone } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { DiagonalLayers, SoftLighting } from '../../components/visuals';
 import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/data';
 import { useAuth } from '../../state/AuthProvider';
@@ -59,9 +60,17 @@ export function HomeScreen({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5">
-      <header>
-        <h1 className="text-display">Welcome back, {firstName(session.user.name)}</h1>
-        <p className="mt-1 text-sm text-secondary">You are signed in as {session.user.email}.</p>
+      <header className="relative">
+        {/* One hero composition behind the greeting's right-side negative space; functional cards
+            below stay untouched. Decorative layer is pointer-events-none and clipped to this box. */}
+        <div className="pointer-events-none absolute inset-0">
+          <DiagonalLayers anchor="top-right" />
+          <SoftLighting position="top-left" />
+        </div>
+        <div className="relative z-10">
+          <h1 className="text-display">Welcome back, {firstName(session.user.name)}</h1>
+          <p className="mt-1 text-sm text-secondary">You are signed in as {session.user.email}.</p>
+        </div>
       </header>
 
       <Card

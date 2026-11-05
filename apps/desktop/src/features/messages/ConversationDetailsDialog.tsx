@@ -8,7 +8,6 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Alert } from '../../components/ui/Alert';
 import { Separator } from '../../components/ui/Separator';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { Spinner } from '../../components/ui/Spinner';
 import { errorMessage } from '../../lib/bridge';
 import { api } from '../../lib/data';
 import { useResource } from '../../hooks/useResource';
@@ -173,9 +172,9 @@ export function ConversationDetailsDialog({
                   <Button
                     size="sm"
                     onClick={() => void addSelected()}
-                    disabled={picked.length === 0 || busy}
+                    loading={busy}
+                    disabled={picked.length === 0}
                   >
-                    {busy ? <Spinner className="size-4" /> : null}
                     Add {picked.length > 0 ? `(${picked.length})` : ''}
                   </Button>
                 </div>

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import type { WorkspaceSummary } from '@buildtogether/shared';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
@@ -84,11 +83,10 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: CreateWorksp
           />
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" onClick={close} disabled={submitting}>
+          <Button variant="outline" onClick={close} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting || name.trim().length === 0}>
-            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          <Button type="submit" loading={submitting} disabled={name.trim().length === 0}>
             Create workspace
           </Button>
         </div>

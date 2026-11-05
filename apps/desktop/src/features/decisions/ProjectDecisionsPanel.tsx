@@ -149,6 +149,7 @@ export function ProjectDecisionsPanel({
       ) : decisions.length === 0 ? (
         <EmptyState
           icon={Scale}
+          visual={searching ? undefined : 'decision'}
           title={searching ? 'No decisions match your search' : 'No decisions yet'}
           description={
             searching

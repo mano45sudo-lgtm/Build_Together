@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2, Ticket } from 'lucide-react';
+import { Ticket } from 'lucide-react';
 import type { InvitationSummary, WorkspaceSummary } from '@buildtogether/shared';
 import { Alert } from '../../components/ui/Alert';
 import { Badge, roleTone } from '../../components/ui/Badge';
@@ -76,12 +76,8 @@ export function AcceptInviteCard({
           placeholder="Paste invitation link or token"
           aria-label="Invitation link or token"
         />
-        <Button type="submit" className="w-full" disabled={busy || link.trim().length === 0}>
-          {busy ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Ticket className="size-4" aria-hidden="true" />
-          )}
+        <Button type="submit" className="w-full" loading={busy} disabled={link.trim().length === 0}>
+          {!busy ? <Ticket className="size-4" aria-hidden="true" /> : null}
           Accept invitation
         </Button>
       </form>
