@@ -3,6 +3,7 @@ import { Hammer } from 'lucide-react';
 import { ClerkProvider } from '@clerk/electron/react';
 import { AppShell } from './layouts/AppShell';
 import { Dialog } from './components/ui/Dialog';
+import { Button } from './components/ui/Button';
 import { Input } from './components/ui/Input';
 import { Spinner } from './components/ui/Spinner';
 import { NAV_ITEMS, type NavId } from './lib/nav';
@@ -48,18 +49,45 @@ const clerkAppearance = {
 } as const;
 
 /** Boot splash shown while the persisted desktop session is being restored. */
-function Splash() {
+function Splash({ message = 'Loading BuildTogether…' }: { message?: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
       <Hammer className="size-5 text-accent" aria-hidden="true" />
       <Spinner />
-      <span className="text-sm">Loading BuildTogether…</span>
+      <span className="text-sm">{message}</span>
     </div>
   );
 }
 
+function AuthRecovery({
+  message,
+  onRetry,
+  onSignOut,
+}: {
+  message: string;
+  onRetry: () => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-6 text-primary">
+      <section className="w-full max-w-md rounded-xl border border-border-subtle bg-surface-1 p-6">
+        <h1 className="text-lg font-semibold">Couldn’t finish signing in</h1>
+        <p role="alert" className="mt-3 text-sm leading-6 text-secondary">
+          {message}
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Button onClick={onRetry}>Try again</Button>
+          <Button variant="secondary" onClick={onSignOut}>
+            Return to sign in
+          </Button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function Shell() {
-  const { status, session, signOut, clerkLoaded } = useAuth();
+  const { status, session, signOut, clerkLoaded, authError, retryAuth } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
@@ -84,8 +112,22 @@ function Shell() {
     if (activeId === 'messages') setChatMounted(true);
   }, [activeId]);
 
-  if (status === 'checking' && !clerkLoaded) return <Splash />;
-  if (status === 'signed-out' || !session) return <WelcomeScreen />;
+  if (status === 'checking')
+    return <Splash message={clerkLoaded ? 'Finishing sign-in…' : 'Loading BuildTogether…'} />;
+  if (status === 'error') {
+    return (
+      <AuthRecovery
+        message={
+          authError ??
+          'Your account returned from Clerk, but BuildTogether could not finish setting up your session.'
+        }
+        onRetry={retryAuth}
+        onSignOut={() => void signOut()}
+      />
+    );
+  }
+  if (status === 'signed-out') return <WelcomeScreen />;
+  if (!session) return <Splash message="Preparing your workspace…" />;
 
   const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
 

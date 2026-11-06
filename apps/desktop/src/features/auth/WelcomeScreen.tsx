@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Hammer } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SignIn, SignUp, useAuth as useClerkAuth } from '@clerk/electron/react';
+import { Spinner } from '../../components/ui/Spinner';
 import { BrandMarkBackground, SoftLighting } from '../../components/visuals';
 
 type Mode = 'signin' | 'signup';
@@ -45,23 +46,28 @@ export function WelcomeScreen() {
           </div>
 
           <section className="w-full min-w-0 rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-lg shadow-black/20 sm:p-6">
-            <div className="mb-6 flex gap-1 rounded-lg border border-border-subtle bg-surface-2 p-1" role="tablist" aria-label="Authentication mode">
-              {(['signin', 'signup'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === value}
-                  onClick={() => setMode(value)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === value ? 'bg-surface-3 text-primary' : 'text-secondary hover:text-primary'}`}
-                >
-                  {value === 'signin' ? 'Sign in' : 'Sign up'}
-                </button>
-              ))}
-            </div>
-            <div className="flex w-full min-w-0 justify-center overflow-hidden">
-              {mode === 'signup' ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
-            </div>
+            {isLoaded ? <>
+              <div className="mb-6 flex gap-1 rounded-lg border border-border-subtle bg-surface-2 p-1" role="tablist" aria-label="Authentication mode">
+                {(['signin', 'signup'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === value}
+                    onClick={() => setMode(value)}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === value ? 'bg-surface-3 text-primary' : 'text-secondary hover:text-primary'}`}
+                  >
+                    {value === 'signin' ? 'Sign in' : 'Sign up'}
+                  </button>
+                ))}
+              </div>
+              <div className="flex w-full min-w-0 justify-center overflow-hidden">
+                {mode === 'signup' ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
+              </div>
+            </> : <div className="flex min-h-[320px] items-center justify-center gap-3 text-sm text-secondary" role="status">
+              <Spinner />
+              <span>Loading secure sign-in…</span>
+            </div>}
           </section>
 
           {clerkTimedOut && <p role="alert" className="mt-4 rounded-lg border border-border-default bg-surface-1 p-3 text-sm text-secondary">

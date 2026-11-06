@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/electron/react';
 import type { AuthSessionView, WorkspaceSummary } from '@buildtogether/shared';
-import { hasBridge, requireBridge, unwrap } from '../lib/bridge';
+import { BridgeError, errorMessage, hasBridge, requireBridge, unwrap } from '../lib/bridge';
 
 /**
  * Client mirror of the authenticated session — but Clerk owns authentication (ADR-0006), so this
@@ -22,12 +22,13 @@ import { hasBridge, requireBridge, unwrap } from '../lib/bridge';
  * email verification, and password reset are driven directly by Clerk hooks in `WelcomeScreen`, NOT here.
  */
 
-export type AuthStatus = 'checking' | 'signed-out' | 'signed-in';
+export type AuthStatus = 'checking' | 'signed-out' | 'signed-in' | 'error';
 
 interface AuthContextValue {
   status: AuthStatus;
   /** Clerk initialization is independent from BuildTogether's API session lookup. */
   clerkLoaded: boolean;
+  authError: string | null;
   session: AuthSessionView | null;
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
@@ -36,12 +37,24 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   /** Re-pull the session view (after a workspace/membership change). */
   refresh: () => Promise<void>;
+  retryAuth: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** How often we ferry a freshly-refreshed Clerk session token to main (ms). Well under the ~60s TTL. */
 const TOKEN_KEEPALIVE_MS = 45_000;
+const AUTH_HANDOFF_TIMEOUT_MS = 20_000;
+
+function authFailureMessage(error: unknown): string {
+  if (error instanceof BridgeError && error.code === 'AUTH_NOT_CONFIGURED') {
+    return 'The API is missing its Clerk server key. Set CLERK_SECRET_KEY in apps/api/.env and restart the API.';
+  }
+  if (error instanceof BridgeError && error.code === 'NETWORK_ERROR') {
+    return 'The BuildTogether API could not be reached. Start the API and PostgreSQL, then try again.';
+  }
+  return errorMessage(error);
+}
 
 function pickActiveId(session: AuthSessionView, current: string | null): string | null {
   if (current && session.workspaces.some((w) => w.id === current)) return current;
@@ -54,6 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('checking');
   const [session, setSession] = useState<AuthSessionView | null>(null);
   const [activeWorkspaceId, setActiveId] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const applySession = useCallback((next: AuthSessionView) => {
     setSession(next);
@@ -64,14 +79,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback((nextStatus: AuthStatus) => {
     setSession(null);
     setActiveId(null);
+    setAuthError(null);
     setStatus(nextStatus);
   }, []);
+
+  const retryAuth = useCallback(() => setRetryCount((count) => count + 1), []);
 
   // React to Clerk's auth state: sync the token to main and resolve the sanitized `me` view.
   useEffect(() => {
     if (!isLoaded) {
-      clearSession('signed-out');
-      return;
+      setSession(null);
+      setActiveId(null);
+      setAuthError(null);
+      setStatus('checking');
+      const timeout = window.setTimeout(() => {
+        setAuthError('Clerk is taking longer than expected to restore your session.');
+        setStatus('error');
+      }, AUTH_HANDOFF_TIMEOUT_MS);
+      return () => window.clearTimeout(timeout);
     }
 
     // Signed out in Clerk — make sure main isn't holding a stale token either.
@@ -82,16 +107,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
+    let timedOut = false;
     setStatus('checking');
+    setAuthError(null);
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      setAuthError(
+        'Finishing sign-in is taking longer than expected. Check your connection and try again.',
+      );
+      setStatus('error');
+    }, AUTH_HANDOFF_TIMEOUT_MS);
     void (async () => {
-      if (!hasBridge()) {
-        clearSession('signed-out');
-        return;
-      }
-      const bridge = requireBridge();
       try {
+        if (!hasBridge()) {
+          clearSession('signed-out');
+          return;
+        }
+        const bridge = requireBridge();
         const token = await getToken();
-        if (cancelled) return;
+        if (cancelled || timedOut) return;
         // No usable session token (e.g. Clerk still establishing) → stay signed-out rather than fire
         // unauthenticated API calls. The keepalive / Clerk state change will retry.
         if (!token) {
@@ -99,20 +133,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         await unwrap(bridge.auth.syncToken(token));
-        if (cancelled) return;
+        if (cancelled || timedOut) return;
         const view = await unwrap(bridge.auth.me());
-        if (cancelled) return;
+        if (cancelled || timedOut) return;
         if (view) applySession(view);
         else clearSession('signed-out');
-      } catch {
-        if (!cancelled) clearSession('signed-out');
+      } catch (error) {
+        if (!cancelled && !timedOut) {
+          setAuthError(authFailureMessage(error));
+          setStatus('error');
+        }
+      } finally {
+        window.clearTimeout(timeout);
       }
     })();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
-  }, [isLoaded, isSignedIn, userId, getToken, applySession, clearSession]);
+  }, [isLoaded, isSignedIn, userId, getToken, retryCount, applySession, clearSession]);
 
   // Keep main's bearer fresh for the duration of the session. Clerk auto-refreshes the underlying
   // session token; we re-fetch and re-push it periodically so a long-lived desktop session never lets
@@ -152,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       status,
       clerkLoaded: isLoaded,
+      authError,
       session,
       workspaces: session?.workspaces ?? [],
       activeWorkspaceId,
@@ -159,8 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveWorkspaceId: setActiveId,
       signOut,
       refresh,
+      retryAuth,
     };
-  }, [status, session, activeWorkspaceId, signOut, refresh]);
+  }, [status, authError, session, activeWorkspaceId, signOut, refresh, retryAuth]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

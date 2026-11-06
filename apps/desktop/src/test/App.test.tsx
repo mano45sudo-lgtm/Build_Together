@@ -116,10 +116,11 @@ describe('desktop shell', () => {
     expect(screen.getByRole('link', { name: /sign up/i })).toBeInTheDocument();
   });
 
-  it('keeps Clerk sign-in mounted while Clerk is still initializing', async () => {
+  it('shows one stable loading state before Clerk UI is ready', async () => {
     setClerkLoaded(false);
     render(<App />);
-    expect(await screen.findByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
+    expect(await screen.findByText(/loading secure sign-in/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tablist', { name: /authentication mode/i })).not.toBeInTheDocument();
   });
 
   it('renders the authenticated shell and active workspace once a session exists', async () => {

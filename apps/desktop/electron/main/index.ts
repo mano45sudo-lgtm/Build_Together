@@ -8,6 +8,7 @@ import { waitForApiReady } from './api-ready';
 import { registerContentSecurityPolicy, registerPermissionGuards } from './security';
 import { buildApplicationMenu } from './menu';
 import { APP_HOST, APP_SCHEME, handleAppScheme } from './protocol';
+import { getProtocolClientRegistration } from './protocol-client';
 
 // A single-instance desktop app: refocus the existing window instead of opening a second one.
 const gotLock = app.requestSingleInstanceLock();
@@ -41,6 +42,24 @@ if (!gotLock) {
     renderer: { scheme: APP_SCHEME, host: APP_HOST },
     manageSingleInstanceLock: false,
   });
+  // Clerk registers the scheme while setting up its OAuth bridge. In Windows development that
+  // default registration points at electron.exe without the app path, so Windows launches Electron
+  // with the callback URL as if it were an app directory. Re-register with Electron's documented
+  // development arguments; packaged builds use the installer-registered executable unchanged.
+  const protocolRegistration = getProtocolClientRegistration({
+    protocol: APP_SCHEME,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    executablePath: process.execPath,
+    appPath: app.getAppPath(),
+  });
+  if ('args' in protocolRegistration) {
+    app.setAsDefaultProtocolClient(
+      protocolRegistration.protocol,
+      protocolRegistration.executablePath,
+      protocolRegistration.args,
+    );
+  }
   app.on('before-quit', () => clerkBridge.cleanup());
 
   void app.whenReady().then(async () => {

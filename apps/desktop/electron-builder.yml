@@ -1,12 +1,11 @@
 # electron-builder configuration for the BuildTogether desktop app.
 #
 # WHY THIS EXISTS: Clerk's Electron OAuth (Google/SSO) completes by opening the provider in the system
-# browser and returning to the app through a `app://` deep link. Per Clerk's official docs, that deep
-# link only reaches a PACKAGED app — never `electron-vite dev` — and the OS must know that `app://`
+# browser and returning to the app through a `app://` deep link. The OS must know that `app://`
 # belongs to this executable. Two things register it:
 #   1. `protocols` below — the NSIS installer writes the `app` scheme into the Windows registry.
-#   2. At runtime, Clerk's `createClerkBridge({ renderer: { scheme: 'app', host: 'bundle' } })` also
-#      calls `app.setAsDefaultProtocolClient('app')`, self-registering the running executable.
+#   2. At runtime, Clerk's bridge registers the scheme. Windows development builds then re-register
+#      with Electron's app-path argument (see `electron/main/index.ts`).
 # The renderer is served from `app://bundle` in packaged builds (see electron/main/protocol.ts), so the
 # OAuth redirect origin and the document origin match — which is exactly what Clerk requires.
 #
