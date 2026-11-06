@@ -21,7 +21,10 @@ const publicUserSelect = {
 export interface NewUser {
   name: string;
   email: string;
-  passwordHash: string;
+  /** Clerk's stable user id (ADR-0006). Required for Clerk-provisioned identities. */
+  clerkUserId?: string;
+  /** Legacy self-managed accounts only; Clerk-provisioned users have no local password. */
+  passwordHash?: string | null;
 }
 
 export async function createUser(data: NewUser): Promise<UserRecord> {
@@ -32,10 +35,19 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
   return prisma.user.findUnique({ where: { id }, select: publicUserSelect });
 }
 
+/**
+ * Identity mapping (ADR-0006): resolve the internal user from Clerk's stable `sub` claim. This —
+ * never email — is the lookup used on every authenticated request. Returns the record plus the
+ * `status` the middleware needs to reject a disabled account.
+ */
+export async function findByClerkUserId(clerkUserId: string): Promise<UserRecord | null> {
+  return prisma.user.findUnique({ where: { clerkUserId }, select: publicUserSelect });
+}
+
 /** Login only: includes the Argon2id hash. Callers must never return this to a client. */
 export async function findByEmailWithSecret(
   email: string,
-): Promise<{ id: string; passwordHash: string; status: 'ACTIVE' | 'DISABLED' } | null> {
+): Promise<{ id: string; passwordHash: string | null; status: 'ACTIVE' | 'DISABLED' } | null> {
   return prisma.user.findUnique({
     where: { email },
     select: { id: true, passwordHash: true, status: true },
@@ -45,7 +57,7 @@ export async function findByEmailWithSecret(
 /** Password-change only: resolve the secret + status directly by id (avoids an extra hop). */
 export async function findSecretById(
   id: string,
-): Promise<{ passwordHash: string; status: 'ACTIVE' | 'DISABLED' } | null> {
+): Promise<{ passwordHash: string | null; status: 'ACTIVE' | 'DISABLED' } | null> {
   return prisma.user.findUnique({ where: { id }, select: { passwordHash: true, status: true } });
 }
 

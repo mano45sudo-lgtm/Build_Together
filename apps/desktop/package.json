@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@buildtogether/shared": "workspace:*",
+    "@clerk/electron": "^0.1.9",
     "@rongcloud/imlib-next": "^5.46.1",
+    "electron-store": "^8.2.0",
     "lucide-react": "^1.67.0",
     "motion": "^14.9.0",
     "react": "^19.3.1",

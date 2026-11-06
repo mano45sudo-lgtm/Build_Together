@@ -8,6 +8,7 @@ import type {
 } from '@buildtogether/shared';
 import { AuthProvider } from '../state/AuthProvider';
 import { MyWorkScreen } from '../features/mywork/MyWorkScreen';
+import { signInAsClerk } from './clerk';
 
 /**
  * My Work renderer tests (brief §6 + §9 desktop). The screen must aggregate ONLY the real, server-
@@ -69,7 +70,7 @@ let mine: MyTaskView[] = [];
 
 function installBridge() {
   const bridge = {
-    auth: { me: () => ok(session) },
+    auth: { syncToken: () => ok(null), me: () => ok(session) },
     members: { list: () => ok([]) },
     tasks: {
       assignedToMe: vi.fn(() => ok(mine)),
@@ -99,6 +100,7 @@ let bridge: ReturnType<typeof installBridge>;
 beforeEach(() => {
   mine = [];
   bridge = installBridge();
+  signInAsClerk();
 });
 
 afterEach(() => {

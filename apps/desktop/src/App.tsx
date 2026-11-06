@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Hammer } from 'lucide-react';
+import { ClerkProvider } from '@clerk/electron/react';
 import { AppShell } from './layouts/AppShell';
 import { Dialog } from './components/ui/Dialog';
 import { Input } from './components/ui/Input';
@@ -25,6 +26,35 @@ import { SettingsScreen } from './features/settings/SettingsScreen';
 const MessagesScreen = lazy(() =>
   import('./features/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })),
 );
+
+/**
+ * Clerk prebuilt `<SignIn/>`/`<SignUp/>` theming (ADR-0006). Clerk renders inside a shadow root, so
+ * external Tailwind class names do not reach it — we theme through `variables` (CSS custom properties
+ * Clerk applies within its own shadow DOM) and inline style objects for `elements`. The `footer` (with
+ * Clerk's own sign-in/sign-up cross-link + branding) is hidden because `WelcomeScreen` owns switching
+ * via its Monochrome tabs, so there are no dead in-page links.
+ */
+const clerkAppearance = {
+  variables: {
+    colorPrimary: '#d4d7dc',
+    colorBackground: '#14171c',
+    colorText: '#e6e8eb',
+    colorTextSecondary: '#9aa0a8',
+    colorInputBackground: '#0f1216',
+    colorInputText: '#e6e8eb',
+    colorDanger: '#f87171',
+    colorSuccess: '#4ade80',
+    borderRadius: '0.5rem',
+  },
+  elements: {
+    footer: { display: 'none' },
+    // Strip Clerk's own card chrome so the WelcomeScreen surface is the single visible container,
+    // and let the form fill it (Clerk's default card is a fixed ~400px box centered in the root).
+    card: { boxShadow: 'none', background: 'transparent', padding: '0' },
+    cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%' },
+    rootBox: { width: '100%', maxWidth: '100%' },
+  },
+} as const;
 
 /** Boot splash shown while the persisted desktop session is being restored. */
 function Splash() {
@@ -165,9 +195,25 @@ function Shell() {
 }
 
 export function App() {
+  // Clerk owns authentication (ADR-0006). The publishable key is a public, non-secret value that must
+  // be provided via the environment; without it Clerk cannot initialize, so we surface an explicit
+  // configuration error rather than mounting a provider that would fail silently into a dead UI.
+  const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+  if (!publishableKey) {
+    return (
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
+        <Hammer className="size-5 text-accent" aria-hidden="true" />
+        <span className="text-sm">
+          Authentication is not configured (missing Clerk publishable key).
+        </span>
+      </div>
+    );
+  }
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <ClerkProvider publishableKey={publishableKey} appearance={clerkAppearance}>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+    </ClerkProvider>
   );
 }

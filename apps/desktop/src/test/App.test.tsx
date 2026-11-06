@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import type { AuthSessionView, DesktopBridge, IpcOutcome } from '@buildtogether/shared';
 import { App } from '../App';
+import { signInAsClerk } from './clerk';
 
 /**
  * Renderer component tests (brief §13). Outside Electron the bridge is absent, so the app must show
@@ -43,11 +44,9 @@ function installBridge() {
     openExternal: () => ok({ ok: true }),
     window: { minimize: () => ok(null), toggleMaximize: () => ok(null), close: () => ok(null) },
     auth: {
+      // Clerk owns auth: main holds the synced short-lived JWT and serves the sanitized `me` view.
+      syncToken: () => ok(null),
       me: () => ok(session),
-      register: () => ok(session),
-      login: () => ok(session),
-      logout: () => ok(null),
-      changePassword: () => ok(null),
     },
     users: { updateMe: () => ok(session.user) },
     workspaces: {
@@ -110,13 +109,18 @@ afterEach(() => {
 describe('desktop shell', () => {
   it('shows the sign-in gate when there is no authenticated session', async () => {
     render(<App />);
-    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    // Clerk owns the auth UI (ADR-0006): the gate mounts Clerk's SignIn component (stubbed in the
+    // test mock) and offers Monochrome tabs to switch between sign-in and sign-up.
+    expect(
+      await screen.findByRole('heading', { name: /sign in to your account/i }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /sign up/i })).toBeInTheDocument();
   });
 
   it('renders the authenticated shell and active workspace once a session exists', async () => {
     installBridge();
+    signInAsClerk();
     render(<App />);
     const nav = await screen.findByRole('navigation', { name: /primary/i });
     expect(nav).toBeInTheDocument();
@@ -127,6 +131,7 @@ describe('desktop shell', () => {
 
   it('opens the workspace projects list from the navigation', async () => {
     installBridge();
+    signInAsClerk();
     render(<App />);
     const nav = await screen.findByRole('navigation', { name: /primary/i });
     fireEvent.click(within(nav).getByRole('button', { name: /projects/i }));

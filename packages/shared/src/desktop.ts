@@ -4,23 +4,22 @@
  * compile against the same types (frontend-engineering + security-review rules).
  *
  * SECURITY: this describes only the *minimal, allowlisted* surface exposed to the renderer.
- * Raw `ipcRenderer` / Node APIs are never exposed. **Authentication tokens NEVER cross into
- * the renderer** — the renderer requests named operations and the trusted main process
- * attaches/detaches the session token when it talks to the API (see ADR-0003).
+ * Raw `ipcRenderer` / Node APIs are never exposed. **Clerk's long-lived client tokens NEVER reach
+ * the renderer or this bridge** — Clerk's own Electron storage (safeStorage-encrypted, main process)
+ * owns them. The renderer obtains only a SHORT-LIVED session JWT from `@clerk/electron/react`
+ * `getToken()` and hands THAT to the trusted main process via `auth.syncToken`; main then attaches it
+ * to every API call, so the main process remains the sole authenticated API caller (ADR-0003/ADR-0006).
  */
 
 import type {
   AcceptInvitationInput,
   AuthSessionView,
-  ChangePasswordInput,
   CreateInvitationInput,
   CreateWorkspaceInput,
   CreatedInvitation,
   InvitationSummary,
-  LoginInput,
   MemberSummary,
   PublicUser,
-  RegisterInput,
   UpdateProfileInput,
   UpdateWorkspaceInput,
   WorkspaceRole,
@@ -89,13 +88,17 @@ export interface DesktopBridge {
     toggleMaximize(): Promise<void>;
     close(): Promise<void>;
   };
+  /**
+   * Clerk owns authentication: the renderer drives sign up/in, email verification and password
+   * reset through `@clerk/electron/react` hooks (never this bridge). Once Clerk has a session, the
+   * renderer obtains a short-lived session JWT via `getToken()` and pushes it here so main can use
+   * it as the API bearer token; `null` clears it (sign-out). No long-lived credential crosses here.
+   */
   auth: {
-    register(input: RegisterInput): Promise<IpcOutcome<AuthSessionView>>;
-    login(input: LoginInput): Promise<IpcOutcome<AuthSessionView>>;
-    logout(): Promise<IpcOutcome<null>>;
-    /** Current session view, or data null when the main process holds no valid session. */
+    /** Sync the current short-lived Clerk session JWT to the trusted main process (null ⇒ clear). */
+    syncToken(token: string | null): Promise<IpcOutcome<null>>;
+    /** Current session view, or data null when main holds no valid/verified Clerk session. */
     me(): Promise<IpcOutcome<AuthSessionView | null>>;
-    changePassword(input: ChangePasswordInput): Promise<IpcOutcome<null>>;
   };
   users: {
     updateMe(input: UpdateProfileInput): Promise<IpcOutcome<PublicUser>>;
@@ -296,12 +299,9 @@ export const IPC = {
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggle-maximize',
   WINDOW_CLOSE: 'window:close',
-  // Auth
-  AUTH_REGISTER: 'auth:register',
-  AUTH_LOGIN: 'auth:login',
-  AUTH_LOGOUT: 'auth:logout',
+  // Auth (Clerk owns credentials; this bridge only syncs the short-lived session JWT + reads `me`)
+  AUTH_SYNC_TOKEN: 'auth:sync-token',
   AUTH_ME: 'auth:me',
-  AUTH_CHANGE_PASSWORD: 'auth:change-password',
   // Users
   USERS_UPDATE_ME: 'users:update-me',
   // Workspaces

@@ -1,22 +1,19 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
-import type { AuthSessionView, IssuedSession } from '@buildtogether/shared';
+import type { AuthSessionView } from '@buildtogether/shared';
 import { prisma } from '../lib/prisma.js';
-import { PASSWORD, resetDb, TestApi } from '../test/harness.js';
+import { resolveInternalIdentity } from '../services/identity.service.js';
+import { mintClerkToken, resetClerkFixtures } from '../test/clerk-fixtures.js';
+import { resetDb, TestApi } from '../test/harness.js';
 
 /**
- * End-to-end auth tests over the real HTTP API + migrated PostgreSQL (ADR-0003): registration
- * validation, Argon2id hashing, login (no account enumeration), opaque-session authentication,
- * refresh-token rotation with family reuse-detection, and password change.
+ * Clerk identity tests over the real HTTP API + migrated PostgreSQL (ADR-0006). Clerk owns
+ * credentials, so these verify the API's trust boundary instead: a VERIFIED Clerk `sub` maps onto a
+ * stable internal identity (provisioned on first login, reused thereafter), email is never a merge
+ * key, and unverified/absent tokens fail closed. Tests use the injected fake Clerk seams and never
+ * fabricate a real Clerk JWT.
  */
 
-const PW = PASSWORD; // 26 chars, passes the ≥10 policy
-const NEW_PW = 'N3w-Str0ng-Passphrase-Changed!';
-
-// hashToken mirror (SHA-256 hex) so we can target a session row by its stored access hash.
-const sha = (t: string): string => createHash('sha256').update(t).digest('hex');
-
-describe('auth', () => {
+describe('clerk identity', () => {
   let api: TestApi;
 
   beforeAll(async () => {
@@ -27,230 +24,125 @@ describe('auth', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    resetClerkFixtures();
   });
 
-  it('registers a user and returns a token pair + session (no password hash on the wire)', async () => {
-    const res = await api.post<IssuedSession>('/api/v1/auth/register', {
-      name: 'Ada Lovelace',
+  it('provisions a new internal user on the first valid Clerk token and returns the session view', async () => {
+    const token = mintClerkToken({
+      clerkUserId: 'user_new_1',
       email: 'ada@example.com',
-      password: PW,
+      name: 'Ada Lovelace',
     });
-    expect(res.status).toBe(201);
-    const data = res.body.data!;
-    expect(data.tokens.accessToken).toBeTruthy();
-    expect(data.tokens.refreshToken).toBeTruthy();
-    expect(data.session.user.email).toBe('ada@example.com');
-    expect(data.session.workspaces).toEqual([]);
+    const res = await api.get<AuthSessionView>('/api/v1/auth/me', token);
+    expect(res.status).toBe(200);
+    expect(res.body.data!.user.email).toBe('ada@example.com');
+    expect(res.body.data!.user.name).toBe('Ada Lovelace');
+    expect(res.body.data!.workspaces).toEqual([]);
+    const row = await prisma.user.findUnique({ where: { clerkUserId: 'user_new_1' } });
+    expect(row).not.toBeNull();
+    expect(row!.passwordHash).toBeNull(); // Clerk-provisioned users have no local password
     expect(JSON.stringify(res.body)).not.toMatch(/passwordHash/i);
   });
 
-  it('normalizes email (trim + lowercase)', async () => {
-    const issued = await api.registerAs('Grace Hopper', '  GRACE@Example.COM  ', PW);
-    expect(issued.session.user.email).toBe('grace@example.com');
-    const row = await prisma.user.findUnique({ where: { email: 'grace@example.com' } });
-    expect(row).not.toBeNull();
+  it('reuses the SAME internal user for a later token with the same Clerk id (no duplicate)', async () => {
+    const t1 = mintClerkToken({
+      clerkUserId: 'user_stable',
+      email: 'sam@example.com',
+      name: 'Sam',
+    });
+    await api.get('/api/v1/auth/me', t1);
+    const afterFirst = await prisma.user.count({ where: { clerkUserId: 'user_stable' } });
+    // A fresh session token (Clerk issues many) for the same identity must not create a second row.
+    const t2 = mintClerkToken({
+      clerkUserId: 'user_stable',
+      email: 'sam@example.com',
+      name: 'Sam',
+    });
+    const me = await api.get<AuthSessionView>('/api/v1/auth/me', t2);
+    expect(me.status).toBe(200);
+    const afterSecond = await prisma.user.count({ where: { clerkUserId: 'user_stable' } });
+    expect(afterFirst).toBe(1);
+    expect(afterSecond).toBe(1);
   });
 
-  it('stores the password as an Argon2id hash', async () => {
-    await api.registerAs('Hasher', 'hash@example.com', PW);
-    const row = await prisma.user.findUnique({ where: { email: 'hash@example.com' } });
-    expect(row!.passwordHash.startsWith('$argon2id$')).toBe(true);
-    expect(row!.passwordHash).not.toContain(PW);
+  it('keys identity on the Clerk id, not email: a Clerk email change never spawns a duplicate', async () => {
+    const t1 = mintClerkToken({
+      clerkUserId: 'user_emailmove',
+      email: 'old@example.com',
+      name: 'Max',
+    });
+    await api.get('/api/v1/auth/me', t1);
+    // Same Clerk id, email now changed upstream. The internal id stays the anchor; no new user.
+    const t2 = mintClerkToken({
+      clerkUserId: 'user_emailmove',
+      email: 'new@example.com',
+      name: 'Max',
+    });
+    const me = await api.get<AuthSessionView>('/api/v1/auth/me', t2);
+    expect(me.status).toBe(200);
+    expect(me.body.data!.user.email).toBe('old@example.com'); // resolved by clerkUserId, not re-keyed by email
+    expect(await prisma.user.count({ where: { clerkUserId: 'user_emailmove' } })).toBe(1);
   });
 
-  it('rejects a duplicate email with 409', async () => {
-    await api.registerAs('First', 'dup@example.com', PW);
-    const res = await api.post('/api/v1/auth/register', {
-      name: 'Second',
-      email: 'dup@example.com',
-      password: PW,
-    });
-    expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe('EMAIL_TAKEN');
-  });
-
-  it('rejects an invalid email with 400 + field details', async () => {
-    const res = await api.post('/api/v1/auth/register', {
-      name: 'Bad',
-      email: 'not-an-email',
-      password: PW,
-    });
-    expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
-    expect(res.body.error?.details?.email?.length).toBeGreaterThan(0);
-  });
-
-  it('rejects a weak (too-short) password with 400', async () => {
-    const res = await api.post('/api/v1/auth/register', {
-      name: 'Short',
-      email: 'short@example.com',
-      password: 'tiny',
-    });
-    expect(res.status).toBe(400);
-    expect(res.body.error?.details?.password?.length).toBeGreaterThan(0);
-  });
-
-  it('logs in with correct credentials', async () => {
-    await api.registerAs('Login User', 'login@example.com', PW);
-    const res = await api.post<IssuedSession>('/api/v1/auth/login', {
-      email: 'login@example.com',
-      password: PW,
-    });
-    expect(res.status).toBe(201);
-    expect(res.body.data!.tokens.accessToken).toBeTruthy();
-  });
-
-  it('does not leak whether an email exists (identical generic failure)', async () => {
-    await api.registerAs('Exists', 'exists@example.com', PW);
-    const wrongPw = await api.post('/api/v1/auth/login', {
-      email: 'exists@example.com',
-      password: 'wrong-password-xyz',
-    });
-    const noSuch = await api.post('/api/v1/auth/login', {
-      email: 'ghost@example.com',
-      password: 'wrong-password-xyz',
-    });
-    expect(wrongPw.status).toBe(401);
-    expect(noSuch.status).toBe(401);
-    expect(noSuch.body.error).toEqual(wrongPw.body.error);
-    expect(wrongPw.body.error?.message).toMatch(/incorrect email or password/i);
-  });
-
-  it('rejects a disabled account at login', async () => {
-    await api.registerAs('Banned', 'banned@example.com', PW);
-    await prisma.user.update({
-      where: { email: 'banned@example.com' },
-      data: { status: 'DISABLED' },
-    });
-    const res = await api.post('/api/v1/auth/login', { email: 'banned@example.com', password: PW });
+  it('rejects a request with no bearer token', async () => {
+    const res = await api.get('/api/v1/auth/me');
     expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('ACCOUNT_DISABLED');
+    expect(res.body.error?.code).toBe('UNAUTHENTICATED');
   });
 
-  it('authenticates /me with a bearer token and rejects without one', async () => {
-    const { tokens, session } = await api.registerAs('Ada', 'ada@example.com', PW);
-    const okRes = await api.get<AuthSessionView>('/api/v1/auth/me', tokens.accessToken);
-    expect(okRes.status).toBe(200);
-    expect(okRes.body.data!.user.email).toBe(session.user.email);
-
-    const anon = await api.get('/api/v1/auth/me');
-    expect(anon.status).toBe(401);
-    expect(anon.body.error?.code).toBe('UNAUTHENTICATED');
-  });
-
-  it('rejects a garbage bearer token', async () => {
-    const res = await api.get('/api/v1/auth/me', 'not-a-real-token');
+  it('rejects a garbage/unverified bearer token (fails closed)', async () => {
+    const res = await api.get('/api/v1/auth/me', 'not-a-real-clerk-token');
     expect(res.status).toBe(401);
     expect(res.body.error?.code).toBe('INVALID_SESSION');
   });
 
-  it('revokes the session on logout (access token stops working)', async () => {
-    const { tokens } = await api.registerAs('Out', 'out@example.com', PW);
-    const out = await api.post(
-      '/api/v1/auth/logout',
-      { refreshToken: tokens.refreshToken },
-      tokens.accessToken,
-    );
-    expect(out.status).toBe(200);
-    const after = await api.get('/api/v1/auth/me', tokens.accessToken);
-    expect(after.status).toBe(401);
-    expect(after.body.error?.code).toBe('INVALID_SESSION');
-  });
-
-  it('rejects an expired access token', async () => {
-    const { tokens } = await api.registerAs('Exp', 'exp@example.com', PW);
-    await prisma.session.update({
-      where: { accessTokenHash: sha(tokens.accessToken) },
-      data: { accessExpiresAt: new Date(Date.now() - 1000) },
+  it('rejects a disabled internal account even with a valid Clerk session', async () => {
+    const token = mintClerkToken({
+      clerkUserId: 'user_banned',
+      email: 'banned@example.com',
+      name: 'B',
     });
-    const res = await api.get('/api/v1/auth/me', tokens.accessToken);
+    await api.get('/api/v1/auth/me', token);
+    await prisma.user.update({
+      where: { clerkUserId: 'user_banned' },
+      data: { status: 'DISABLED' },
+    });
+    const res = await api.get('/api/v1/auth/me', token);
     expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('SESSION_EXPIRED');
+    expect(res.body.error?.code).toBe('ACCOUNT_DISABLED');
   });
 
-  it('rotates refresh tokens and detects reuse by revoking the whole family', async () => {
-    const { tokens } = await api.registerAs('Rot', 'rot@example.com', PW);
-
-    const first = await api.post<IssuedSession>('/api/v1/auth/refresh', {
-      refreshToken: tokens.refreshToken,
+  it('never auto-links by email: provisioning that collides with a legacy account is a conflict', async () => {
+    // A legacy self-managed user exists with no Clerk id.
+    const legacy = await prisma.user.create({
+      data: { name: 'Legacy', email: 'clash@example.com', passwordHash: '$argon2id$legacy' },
+      select: { id: true, clerkUserId: true },
     });
-    expect(first.status).toBe(200);
-    const rotated = first.body.data!;
-    expect(rotated.tokens.refreshToken).not.toBe(tokens.refreshToken);
-
-    // The successor access token works.
-    const me = await api.get('/api/v1/auth/me', rotated.tokens.accessToken);
-    expect(me.status).toBe(200);
-
-    // Replaying the OLD (already-rotated) refresh token signals theft → family revoked.
-    const reuse = await api.post('/api/v1/auth/refresh', { refreshToken: tokens.refreshToken });
-    expect(reuse.status).toBe(401);
-    expect(reuse.body.error?.code).toBe('REFRESH_REUSE_DETECTED');
-
-    // After reuse detection the successor is revoked too.
-    const afterMe = await api.get('/api/v1/auth/me', rotated.tokens.accessToken);
-    expect(afterMe.status).toBe(401);
-  });
-
-  it('changes the password, keeps this device, and invalidates other sessions', async () => {
-    const a = await api.registerAs('Rotate', 'rotate@example.com', PW);
-    // A second, independent login (different family) representing "another device".
-    const b = await api.post<IssuedSession>('/api/v1/auth/login', {
-      email: 'rotate@example.com',
-      password: PW,
+    expect(legacy.clerkUserId).toBeNull();
+    // A DIFFERENT Clerk identity claims the same email — we must NOT merge it onto the legacy row.
+    const token = mintClerkToken({
+      clerkUserId: 'user_clerk_other',
+      email: 'clash@example.com',
+      name: 'Imposter',
     });
-    const otherAccess = b.body.data!.tokens.accessToken;
-
-    const changed = await api.post<IssuedSession>(
-      '/api/v1/auth/change-password',
-      { currentPassword: PW, newPassword: NEW_PW },
-      a.tokens.accessToken,
-    );
-    expect(changed.status).toBe(200);
-    // The acting device stays signed in with rotated tokens.
-    const meStill = await api.get('/api/v1/auth/me', changed.body.data!.tokens.accessToken);
-    expect(meStill.status).toBe(200);
-    // The other device is logged out.
-    const other = await api.get('/api/v1/auth/me', otherAccess);
-    expect(other.status).toBe(401);
-    // New password logs in; old does not.
-    const loginNew = await api.post('/api/v1/auth/login', {
-      email: 'rotate@example.com',
-      password: NEW_PW,
-    });
-    expect(loginNew.status).toBe(201);
-    const loginOld = await api.post('/api/v1/auth/login', {
-      email: 'rotate@example.com',
-      password: PW,
-    });
-    expect(loginOld.status).toBe(401);
+    const res = await api.get('/api/v1/auth/me', token);
+    expect(res.status).toBe(409);
+    expect(res.body.error?.code).toBe('IDENTITY_EMAIL_CLASH');
+    // The legacy account is untouched (still no clerkUserId) and no new user was created.
+    const stillLegacy = await prisma.user.findUnique({ where: { id: legacy.id } });
+    expect(stillLegacy!.clerkUserId).toBeNull();
+    expect(await prisma.user.count({ where: { clerkUserId: 'user_clerk_other' } })).toBe(0);
+    expect(await prisma.user.count()).toBe(1);
   });
 
-  it('rejects a password change with a wrong current password', async () => {
-    const a = await api.registerAs('Wrong', 'wrongcur@example.com', PW);
-    const res = await api.post(
-      '/api/v1/auth/change-password',
-      { currentPassword: 'not-the-current-password', newPassword: 'Another-Str0ng-Pw!!' },
-      a.tokens.accessToken,
-    );
-    expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('INVALID_CREDENTIALS');
-  });
-
-  it('rejects a new password that equals the current one', async () => {
-    const a = await api.registerAs('Same', 'samepw@example.com', PW);
-    const res = await api.post(
-      '/api/v1/auth/change-password',
-      { currentPassword: PW, newPassword: PW },
-      a.tokens.accessToken,
-    );
-    expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
-  });
-
-  it('logs out idempotently with just a refresh token (no access token needed)', async () => {
-    const { tokens } = await api.registerAs('Idem', 'idem@example.com', PW);
-    const res = await api.post('/api/v1/auth/logout', { refreshToken: tokens.refreshToken });
-    expect(res.status).toBe(200);
+  it('adopts the winning row on a concurrent first login of the same Clerk id (unique-safe)', async () => {
+    mintClerkToken({ clerkUserId: 'user_race', email: 'race@example.com', name: 'Race' });
+    // Fire two provisions concurrently; the unique constraint must yield exactly one internal user.
+    const [a, b] = await Promise.all([
+      resolveInternalIdentity('user_race'),
+      resolveInternalIdentity('user_race'),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(await prisma.user.count({ where: { clerkUserId: 'user_race' } })).toBe(1);
   });
 });

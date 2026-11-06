@@ -2,7 +2,6 @@ import type {
   AcceptInvitationInput,
   AddTaskDependencyInput,
   AssignTaskInput,
-  ChangePasswordInput,
   ChangeTaskStatusInput,
   CreateConversationInput,
   CreateDecisionCommentInput,
@@ -57,10 +56,8 @@ export const api = {
   users: {
     updateMe: (input: UpdateProfileInput) => unwrap(requireBridge().users.updateMe(input)),
   },
-  auth: {
-    changePassword: (input: ChangePasswordInput) =>
-      unwrap(requireBridge().auth.changePassword(input)),
-  },
+  // Auth is intentionally absent here (ADR-0006): Clerk owns sign up/in and password management, and
+  // the short-lived session JWT is synced to the trusted main process by `AuthProvider`, not this layer.
   // Chat APP-LEVEL operations (workspace-scoped metadata + the ephemeral Nexconn client token). The
   // realtime message transport is NOT here — see `chat-client.ts`, which drives Web IMLib directly.
   chat: {

@@ -1,19 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type {
-  AuthSessionView,
-  LoginInput,
-  RegisterInput,
-  WorkspaceSummary,
-} from '@buildtogether/shared';
+import { useAuth as useClerkAuth } from '@clerk/electron/react';
+import type { AuthSessionView, WorkspaceSummary } from '@buildtogether/shared';
 import { hasBridge, requireBridge, unwrap } from '../lib/bridge';
 
 /**
- * Client mirror of the authenticated session. It holds only what the main process is willing to
- * share — the sanitized `AuthSessionView` (user + workspaces) — never a token. On launch it asks the
- * main process for the current session (`me`), which transparently restores a persisted desktop
- * session. The "active workspace" is a UI selection; every workspace-scoped call still carries the
- * id and is re-authorized server-side, so switching is never a client-only illusion of scope.
+ * Client mirror of the authenticated session — but Clerk owns authentication (ADR-0006), so this
+ * provider no longer mints or stores credentials. It reacts to Clerk's auth state (via the
+ * `@clerk/electron/react` `useAuth` hook) and keeps the trusted main process in sync:
+ *
+ *   1. On sign-in we pull a SHORT-LIVED Clerk session JWT with `getToken()` and push it to main over
+ *      `auth.syncToken`. Main is the sole authenticated API caller and holds that JWT only in memory.
+ *   2. We then ask main for the sanitized `me` view (user + workspaces) — the server verifies the JWT
+ *      and resolves the internal identity, so the client never trusts a locally-fabricated session.
+ *   3. A keepalive re-pushes a freshly-refreshed `getToken()` on an interval so main's bearer never goes
+ *      stale mid-session (Clerk rotates session tokens automatically; we just ferry them over).
+ *   4. On sign-out (or a rejected token) we clear main's holder and drop to the signed-out state.
+ *
+ * The "active workspace" is a pure UI selection; every workspace-scoped call still carries the id and
+ * is re-authorized server-side, so switching is never a client-only illusion of scope. Sign up/in,
+ * email verification, and password reset are driven directly by Clerk hooks in `WelcomeScreen`, NOT here.
  */
 
 export type AuthStatus = 'checking' | 'signed-out' | 'signed-in';
@@ -25,16 +31,15 @@ interface AuthContextValue {
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceSummary | null;
   setActiveWorkspaceId: (id: string) => void;
-  signUp: (input: RegisterInput) => Promise<void>;
-  signIn: (input: LoginInput) => Promise<void>;
   signOut: () => Promise<void>;
   /** Re-pull the session view (after a workspace/membership change). */
   refresh: () => Promise<void>;
-  /** Adopt a session view already returned by an action (register/login). */
-  applySession: (session: AuthSessionView) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** How often we ferry a freshly-refreshed Clerk session token to main (ms). Well under the ~60s TTL. */
+const TOKEN_KEEPALIVE_MS = 45_000;
 
 function pickActiveId(session: AuthSessionView, current: string | null): string | null {
   if (current && session.workspaces.some((w) => w.id === current)) return current;
@@ -42,6 +47,8 @@ function pickActiveId(session: AuthSessionView, current: string | null): string 
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, userId, getToken, signOut: clerkSignOut } = useClerkAuth();
+
   const [status, setStatus] = useState<AuthStatus>('checking');
   const [session, setSession] = useState<AuthSessionView | null>(null);
   const [activeWorkspaceId, setActiveId] = useState<string | null>(null);
@@ -52,59 +59,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-in');
   }, []);
 
-  const loadSession = useCallback(async () => {
-    if (!hasBridge()) {
-      setStatus('signed-out');
-      return;
-    }
-    const bridge = requireBridge();
-    const view = await unwrap(bridge.auth.me());
-    if (view) applySession(view);
-    else {
-      setSession(null);
-      setActiveId(null);
-      setStatus('signed-out');
-    }
-  }, [applySession]);
-
-  useEffect(() => {
-    void loadSession().catch(() => setStatus('signed-out'));
-  }, [loadSession]);
-
-  const signUp = useCallback(
-    async (input: RegisterInput) => {
-      const bridge = requireBridge();
-      applySession(await unwrap(bridge.auth.register(input)));
-    },
-    [applySession],
-  );
-
-  const signIn = useCallback(
-    async (input: LoginInput) => {
-      const bridge = requireBridge();
-      applySession(await unwrap(bridge.auth.login(input)));
-    },
-    [applySession],
-  );
-
-  const signOut = useCallback(async () => {
-    const bridge = requireBridge();
-    await unwrap(bridge.auth.logout());
+  const clearSession = useCallback((nextStatus: AuthStatus) => {
     setSession(null);
     setActiveId(null);
-    setStatus('signed-out');
+    setStatus(nextStatus);
   }, []);
 
-  const refresh = useCallback(async () => {
-    const bridge = requireBridge();
-    const view = await unwrap(bridge.auth.me());
-    if (view) applySession(view);
-    else {
-      setSession(null);
-      setActiveId(null);
-      setStatus('signed-out');
+  // React to Clerk's auth state: sync the token to main and resolve the sanitized `me` view.
+  useEffect(() => {
+    if (!isLoaded) {
+      setStatus('checking');
+      return;
     }
-  }, [applySession]);
+
+    // Signed out in Clerk — make sure main isn't holding a stale token either.
+    if (!isSignedIn) {
+      if (hasBridge()) void unwrap(requireBridge().auth.syncToken(null)).catch(() => undefined);
+      clearSession('signed-out');
+      return;
+    }
+
+    let cancelled = false;
+    setStatus('checking');
+    void (async () => {
+      if (!hasBridge()) {
+        clearSession('signed-out');
+        return;
+      }
+      const bridge = requireBridge();
+      try {
+        const token = await getToken();
+        if (cancelled) return;
+        // No usable session token (e.g. Clerk still establishing) → stay signed-out rather than fire
+        // unauthenticated API calls. The keepalive / Clerk state change will retry.
+        if (!token) {
+          clearSession('signed-out');
+          return;
+        }
+        await unwrap(bridge.auth.syncToken(token));
+        if (cancelled) return;
+        const view = await unwrap(bridge.auth.me());
+        if (cancelled) return;
+        if (view) applySession(view);
+        else clearSession('signed-out');
+      } catch {
+        if (!cancelled) clearSession('signed-out');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn, userId, getToken, applySession, clearSession]);
+
+  // Keep main's bearer fresh for the duration of the session. Clerk auto-refreshes the underlying
+  // session token; we re-fetch and re-push it periodically so a long-lived desktop session never lets
+  // the value main holds expire between explicit `me` pulls.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !hasBridge()) return;
+    const id = setInterval(() => {
+      void (async () => {
+        try {
+          const token = await getToken();
+          await unwrap(requireBridge().auth.syncToken(token));
+        } catch {
+          // Transient (offline / brief refresh failure): the next tick or a Clerk state change recovers.
+        }
+      })();
+    }, TOKEN_KEEPALIVE_MS);
+    return () => clearInterval(id);
+  }, [isLoaded, isSignedIn, getToken]);
+
+  const signOut = useCallback(async () => {
+    // Clear main's holder first so no in-flight API call races a torn-down session, then let Clerk end
+    // its own session (which also clears the encrypted client token Clerk persists on disk).
+    if (hasBridge()) await unwrap(requireBridge().auth.syncToken(null)).catch(() => undefined);
+    clearSession('signed-out');
+    await clerkSignOut();
+  }, [clerkSignOut, clearSession]);
+
+  const refresh = useCallback(async () => {
+    if (!hasBridge()) return;
+    const view = await unwrap(requireBridge().auth.me());
+    if (view) applySession(view);
+    else clearSession('signed-out');
+  }, [applySession, clearSession]);
 
   const value = useMemo<AuthContextValue>(() => {
     const activeWorkspace = session?.workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
@@ -115,13 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       activeWorkspaceId,
       activeWorkspace,
       setActiveWorkspaceId: setActiveId,
-      signUp,
-      signIn,
       signOut,
       refresh,
-      applySession,
     };
-  }, [status, session, activeWorkspaceId, signUp, signIn, signOut, refresh, applySession]);
+  }, [status, session, activeWorkspaceId, signOut, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

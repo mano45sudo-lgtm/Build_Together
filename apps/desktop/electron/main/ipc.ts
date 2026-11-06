@@ -4,7 +4,6 @@ import type {
   AcceptInvitationInput,
   AddTaskDependencyInput,
   AssignTaskInput,
-  ChangePasswordInput,
   ChangeTaskStatusInput,
   ConversationKind,
   CreateConversationInput,
@@ -25,11 +24,9 @@ import type {
   DecisionStatus,
   IpcError,
   IpcOutcome,
-  LoginInput,
   ProjectListQuery,
   ProjectStatus,
   ProjectVisibility,
-  RegisterInput,
   SupersedeDecisionInput,
   TaskListQuery,
   TaskPriority,
@@ -60,6 +57,7 @@ import * as api from './api-client';
 import { ApiRequestError } from './api-client';
 import { resolveDesktopConfig, trustedRendererOrigin } from './config';
 import { routeExternalUrl } from './security';
+import { setClerkToken } from './session-store';
 
 /**
  * IPC registration. Every handler validates that the calling frame is our own trusted
@@ -551,43 +549,27 @@ export function registerIpc(): void {
     }),
   );
 
-  // ---- auth ----
-  ipcMain.handle(IPC.AUTH_REGISTER, (event, input: unknown) =>
+  // ---- auth (Clerk owns sign up/in; main only holds the synced short-lived session JWT) ----
+
+  // The renderer obtains a short-lived Clerk session JWT via `getToken()` and pushes it here over the
+  // trusted channel; main stores it in memory (never persisted, never read back to the renderer) and
+  // attaches it as the API bearer. `null` clears it (sign-out / token unavailable). The sender trust
+  // check in `handle` guarantees only our own renderer frame can drive this.
+  ipcMain.handle(IPC.AUTH_SYNC_TOKEN, (event, token: unknown) =>
     handle(event, async () => {
-      const o = asObject(input);
-      const payload: RegisterInput = {
-        name: reqStr(o['name'], 'name'),
-        email: reqStr(o['email'], 'email'),
-        password: reqStr(o['password'], 'password'),
-      };
-      return api.auth.register(payload);
+      if (token === null) {
+        setClerkToken(null);
+        return null;
+      }
+      if (typeof token !== 'string' || token.trim().length === 0) {
+        throw new ApiRequestError('INVALID_ARGUMENT', 'token must be a non-empty string or null');
+      }
+      setClerkToken(token.trim());
+      return null;
     }),
   );
 
-  ipcMain.handle(IPC.AUTH_LOGIN, (event, input: unknown) =>
-    handle(event, async () => {
-      const o = asObject(input);
-      const payload: LoginInput = {
-        email: reqStr(o['email'], 'email'),
-        password: reqStr(o['password'], 'password'),
-      };
-      return api.auth.login(payload);
-    }),
-  );
-
-  ipcMain.handle(IPC.AUTH_LOGOUT, (event) => handle(event, () => api.auth.logout()));
   ipcMain.handle(IPC.AUTH_ME, (event) => handle(event, () => api.auth.me()));
-
-  ipcMain.handle(IPC.AUTH_CHANGE_PASSWORD, (event, input: unknown) =>
-    handle(event, async () => {
-      const o = asObject(input);
-      const payload: ChangePasswordInput = {
-        currentPassword: reqStr(o['currentPassword'], 'currentPassword'),
-        newPassword: reqStr(o['newPassword'], 'newPassword'),
-      };
-      return api.auth.changePassword(payload);
-    }),
-  );
 
   // ---- users ----
   ipcMain.handle(IPC.USERS_UPDATE_ME, (event, input: unknown) =>

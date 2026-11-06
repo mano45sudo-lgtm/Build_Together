@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, LogOut, Save } from 'lucide-react';
+import { LogOut, Save } from 'lucide-react';
 import { Alert } from '../../components/ui/Alert';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge, roleTone } from '../../components/ui/Badge';
@@ -12,7 +12,7 @@ import { api } from '../../lib/data';
 import { canManageTeam } from '../../lib/rbac';
 import { useAuth } from '../../state/AuthProvider';
 
-/** Account, security, and (role-gated) workspace settings. */
+/** Account and (role-gated) workspace settings. Passwords are managed by Clerk, not here (ADR-0006). */
 export function SettingsScreen() {
   const { session, activeWorkspace, signOut } = useAuth();
   if (!session) return null;
@@ -21,25 +21,28 @@ export function SettingsScreen() {
     <div className="mx-auto w-full max-w-2xl space-y-5">
       <header>
         <h1 className="text-display">Settings</h1>
-        <p className="mt-1 text-sm text-secondary">
-          Your profile, security, and workspace preferences.
-        </p>
+        <p className="mt-1 text-sm text-secondary">Your profile and workspace preferences.</p>
       </header>
 
       <ProfileCard key={session.user.id} />
-      <SecurityCard />
       {activeWorkspace ? <WorkspaceCard key={activeWorkspace.id} /> : null}
 
       <Card title="Session">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-secondary">
-            Signed in as <span className="font-medium text-primary">{session.user.email}</span>.
-            Signing out ends this desktop session on the server.
-          </p>
-          <Button variant="secondary" onClick={() => void signOut()}>
-            <LogOut className="size-4" aria-hidden="true" />
-            Sign out
-          </Button>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-secondary">
+              Signed in as <span className="font-medium text-primary">{session.user.email}</span>.
+              Signing out ends this desktop session.
+            </p>
+            <Button variant="secondary" onClick={() => void signOut()}>
+              <LogOut className="size-4" aria-hidden="true" />
+              Sign out
+            </Button>
+          </div>
+          <Alert variant="info">
+            Your password is managed by our authentication provider. To change it, sign out and use
+            &ldquo;Forgot password?&rdquo; on the sign-in screen.
+          </Alert>
         </div>
       </Card>
     </div>
@@ -110,76 +113,6 @@ function ProfileCard() {
           </Button>
         </div>
       </div>
-    </Card>
-  );
-}
-
-// ---- Security ----
-
-function SecurityCard() {
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setBanner(null);
-    setSaved(false);
-    try {
-      await api.auth.changePassword({ currentPassword: current, newPassword: next });
-      setCurrent('');
-      setNext('');
-      setSaved(true);
-    } catch (error) {
-      setBanner(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card title="Security" description="Changing your password signs out your other devices.">
-      <form className="space-y-4" onSubmit={submit}>
-        {banner ? <Alert variant="error">{banner}</Alert> : null}
-        {saved ? (
-          <Alert variant="success">Password changed. Other sessions were signed out.</Alert>
-        ) : null}
-
-        <Field label="Current password" htmlFor="pw-current" required>
-          <Input
-            id="pw-current"
-            type="password"
-            autoComplete="current-password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-          />
-        </Field>
-        <Field
-          label="New password"
-          htmlFor="pw-new"
-          required
-          hint="At least 10 characters."
-          error={undefined}
-        >
-          <Input
-            id="pw-new"
-            type="password"
-            autoComplete="new-password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-          />
-        </Field>
-
-        <div className="flex justify-end">
-          <Button type="submit" loading={busy} disabled={current.length === 0 || next.length === 0}>
-            {!busy ? <KeyRound className="size-4" aria-hidden="true" /> : null}
-            Change password
-          </Button>
-        </div>
-      </form>
     </Card>
   );
 }

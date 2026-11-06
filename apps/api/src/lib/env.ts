@@ -22,6 +22,17 @@ function int(key: string, fallback: number): number {
   return n;
 }
 
+/** Comma-separated list → trimmed, non-empty entries; `undefined` when unset/empty. */
+function parseCsv(key: string): string[] | undefined {
+  const v = process.env[key];
+  if (v === undefined || v === '') return undefined;
+  const items = v
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+  return items.length > 0 ? items : undefined;
+}
+
 export interface Env {
   nodeEnv: string;
   port: number;
@@ -36,6 +47,18 @@ export interface Env {
   chatRateLimit: number;
   intelligenceRateLimit: number;
   publicAppBaseUrl: string;
+  // Clerk (ADR-0006). Authentication is delegated to Clerk; the API only VERIFIES Clerk session
+  // tokens and resolves the internal identity. Verification is possible two ways and BOTH are
+  // optional in dev/test so the rest of the API boots without Clerk credentials (the `authenticate`
+  // middleware then fails closed with 401 for every request). `clerkJwtKey` (a PEM public key) is
+  // the networkless path — preferred in production because it never leaves the server. `clerkSecretKey`
+  // is the remote JWKS path and additionally powers first-login profile provisioning via the Backend
+  // API. The Secret Key is SERVER-ONLY and never belongs in a client bundle.
+  clerkJwtKey?: string | undefined;
+  clerkSecretKey?: string | undefined;
+  clerkIssuer?: string | undefined;
+  clerkAuthorizedParties?: string[] | undefined;
+  clerkAudience?: string | undefined;
   // Nexconn (ADR-0004). Optional in dev/test so the rest of the API boots without chat
   // credentials; the chat module fails closed when they are absent. App Secret is server-only;
   // App Key is a public client identifier (also used for `init` on the client). Callback signature
@@ -71,6 +94,11 @@ export function loadEnv(): Env {
     chatRateLimit: int('CHAT_RATE_LIMIT', 60),
     intelligenceRateLimit: int('INTELLIGENCE_RATE_LIMIT', 120),
     publicAppBaseUrl: str('PUBLIC_APP_BASE_URL', 'http://localhost:5173') as string,
+    clerkJwtKey: str('CLERK_JWT_KEY'),
+    clerkSecretKey: str('CLERK_SECRET_KEY'),
+    clerkIssuer: str('CLERK_JWT_ISSUER'),
+    clerkAuthorizedParties: parseCsv('CLERK_AUTHORIZED_PARTIES'),
+    clerkAudience: str('CLERK_JWT_AUDIENCE'),
     nexconnAppKey: str('NEXCONN_APP_KEY'),
     nexconnAppSecret: str('NEXCONN_APP_SECRET'),
     nexconnPrimaryApiDomain: str('NEXCONN_PRIMARY_API_DOMAIN'),
@@ -82,6 +110,11 @@ export function loadEnv(): Env {
   // Fail closed in production if an insecure default is still in place. Never log values.
   if (env.nodeEnv === 'production' && env.sessionSecret === 'dev-only-insecure-secret') {
     throw new Error('SESSION_SECRET must be set in production');
+  }
+  // Clerk must be verifiable in production: at least one of the networkless JWT public key or the
+  // Secret Key (remote JWKS) is required, otherwise no session token could be trusted.
+  if (env.nodeEnv === 'production' && !env.clerkJwtKey && !env.clerkSecretKey) {
+    throw new Error('CLERK_JWT_KEY or CLERK_SECRET_KEY must be set in production');
   }
   return env;
 }

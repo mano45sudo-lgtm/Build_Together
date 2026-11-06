@@ -1,73 +1,25 @@
-import { app, safeStorage } from 'electron';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 /**
- * Desktop session persistence (ADR-0003 §4). The MAIN process is the sole holder of the
- * opaque access/refresh token pair. It is kept in memory for the running session and, when the
- * OS secret store is available, persisted to disk encrypted via Electron `safeStorage`
- * (DPAPI on Windows, Keychain on macOS, libsecret on Linux) so the desktop session survives
- * restarts.
+ * Desktop session token holder (ADR-0003 §4, ADR-0006). The MAIN process is the sole authenticated
+ * API caller, so it must hold the bearer token that `api-client` attaches to every request. With
+ * Clerk that token is a SHORT-LIVED session JWT (~60s) the renderer obtains via
+ * `@clerk/electron/react` `getToken()` and pushes over the typed `auth.syncToken` IPC channel.
  *
- * SECURITY: raw tokens NEVER reach the renderer, and are NEVER written to disk in plaintext.
- * If `safeStorage` is unavailable (e.g. an unlocked keyring / unsupported headless Linux), we
- * fail *non-silently but safe*: the session stays in memory only and a warning is logged — we
- * would rather lose persistence than store credentials unencrypted.
+ * This holder is deliberately IN-MEMORY ONLY. Clerk's own Electron bridge (`createClerkBridge({
+ * storage })`) persists the long-lived client/refresh tokens at rest via `safeStorage`; we never
+ * duplicate that here, and we never persist this ephemeral JWT. It is cleared on sign-out / expiry.
+ *
+ * SECURITY: this value is the transient bearer token. It is never logged and never returned to the
+ * renderer — the renderer already had it (it minted it); main only caches it for outbound API calls.
  */
 
-export interface StoredTokens {
-  accessToken: string;
-  refreshToken: string;
-  accessExpiresAt: string;
-  refreshExpiresAt: string;
+let current: string | null = null;
+
+/** Replace (or clear, with `null`) the in-memory Clerk session JWT main will attach to API calls. */
+export function setClerkToken(token: string | null): void {
+  current = token;
 }
 
-let current: StoredTokens | null = null;
-
-function storePath(): string {
-  return join(app.getPath('userData'), 'bt-session.bin');
-}
-
-function encryptionAvailable(): boolean {
-  try {
-    return safeStorage.isEncryptionAvailable();
-  } catch {
-    return false;
-  }
-}
-
-/** Load any persisted, decryptable session into memory at startup. Corrupt/missing ⇒ signed out. */
-export async function loadSession(): Promise<void> {
-  if (!encryptionAvailable()) return;
-  try {
-    const bytes = await readFile(storePath());
-    current = JSON.parse(safeStorage.decryptString(bytes)) as StoredTokens;
-  } catch {
-    current = null;
-  }
-}
-
-export function getTokens(): StoredTokens | null {
+/** The current Clerk session JWT, or `null` when no session is synced. */
+export function getClerkToken(): string | null {
   return current;
-}
-
-/** Replace (or clear, with `null`) the in-memory session and mirror it to encrypted storage. */
-export async function setTokens(tokens: StoredTokens | null): Promise<void> {
-  current = tokens;
-
-  if (!tokens) {
-    await rm(storePath(), { force: true }).catch(() => undefined);
-    return;
-  }
-
-  if (!encryptionAvailable()) {
-    console.error(
-      '[desktop] OS secret store unavailable — session kept in memory only and will not survive restart',
-    );
-    return;
-  }
-
-  const encrypted = safeStorage.encryptString(JSON.stringify(tokens));
-  await mkdir(app.getPath('userData'), { recursive: true });
-  await writeFile(storePath(), encrypted);
 }

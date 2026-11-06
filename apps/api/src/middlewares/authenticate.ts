@@ -1,17 +1,19 @@
 import type { NextFunction, Request, Response } from 'express';
 import { unauthorized } from '../errors/app-error.js';
-import * as sessionRepo from '../repositories/session.repo.js';
+import { getClerkVerifier } from '../lib/clerk.js';
+import { resolveInternalIdentity } from '../services/identity.service.js';
 import type { AuthContext } from '../types/auth.js';
 
 /**
- * Authenticates a request from its `Authorization: Bearer <raw-access-token>` header.
+ * Authenticates a request from its `Authorization: Bearer <clerk-session-token>` header (ADR-0006).
  *
- * The token is a high-entropy opaque string; the server stores only its SHA-256 hash (ADR-0003),
- * resolved here via the session repository (never Prisma directly from middleware). We reject if
- * the session was revoked, has expired, or belongs to a disabled account. On success we attach
- * `{ userId, sessionId }` to `req.auth` — identifiers only, never the token. There is no cookie
- * session, so CSRF is not applicable; the `Authorization` header is itself the CSRF defence (a
- * cross-site form cannot set it).
+ * Clerk is the authentication authority; this middleware is the API's single trust boundary. It
+ * (1) cryptographically verifies the Clerk session token via the supported Backend SDK — never a
+ * hand-decoded JWT — then (2) maps the verified Clerk user id (`sub`) onto Cue's internal identity,
+ * provisioning a first-timer. It attaches ONLY `{ userId, sessionId }` (internal id + Clerk `sid`)
+ * to `req.auth` — never the raw token or any client-asserted id. There is no cookie session, so the
+ * `Authorization` header is itself the CSRF defence. Authorization (workspace roles, membership) is
+ * resolved separately and later by `requireWorkspaceRole`; nothing here trusts a body/query id.
  */
 export async function authenticate(
   req: Request,
@@ -23,18 +25,10 @@ export async function authenticate(
     const raw = header?.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!raw) throw unauthorized('UNAUTHENTICATED', 'Authentication required');
 
-    const session = await sessionRepo.findSessionByAccessHash(raw);
-    if (!session || session.revokedAt !== null) {
-      throw unauthorized('INVALID_SESSION', 'Session is invalid or revoked');
-    }
-    if (session.accessExpiresAt.getTime() <= Date.now()) {
-      throw unauthorized('SESSION_EXPIRED', 'Session has expired');
-    }
-    if (session.user.status !== 'ACTIVE') {
-      throw unauthorized('ACCOUNT_DISABLED', 'Account is disabled');
-    }
+    const verified = await getClerkVerifier()(raw);
+    const user = await resolveInternalIdentity(verified.clerkUserId);
 
-    const auth: AuthContext = { userId: session.userId, sessionId: session.id };
+    const auth: AuthContext = { userId: user.id, sessionId: verified.sessionId };
     req.auth = auth;
     next();
   } catch (err) {

@@ -1,13 +1,21 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { exposeClerkBridge } from '@clerk/electron/preload';
 import type { DesktopBridge } from '@buildtogether/shared';
 import { IPC } from '@buildtogether/shared';
 
 /**
  * Sandboxed, typed preload bridge. Exposes a minimal, NAMED surface on `window.bt` — never raw
- * `ipcRenderer`, never Node APIs, and never authentication tokens (ADR-0003 §11). Each method maps
- * to exactly one allowlisted IPC channel; the trusted main process attaches the session token,
- * authorizes against the server, and returns only sanitized views. (Electron security #17 / #20.)
+ * `ipcRenderer`, never Node APIs, and never long-lived credentials (ADR-0003 §11; ADR-0006). Each
+ * method maps to exactly one allowlisted IPC channel; the trusted main process authorizes against the
+ * server and returns only sanitized views. (Electron security #17 / #20.)
+ *
+ * Clerk owns authentication: `exposeClerkBridge()` installs the official `@clerk/electron` IPC bridge
+ * the renderer's `@clerk/electron/react` provider talks to (sign up/in, verification, token refresh).
+ * Our own `auth` surface only relays the resulting SHORT-LIVED session JWT to main (`syncToken`) and
+ * reads the sanitized `me` view — no credential/refresh endpoints remain.
  */
+exposeClerkBridge();
+
 function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   return ipcRenderer.invoke(channel, ...args) as Promise<T>;
 }
@@ -26,11 +34,8 @@ const bridge: DesktopBridge = {
   },
 
   auth: {
-    register: (input) => invoke(IPC.AUTH_REGISTER, input),
-    login: (input) => invoke(IPC.AUTH_LOGIN, input),
-    logout: () => invoke(IPC.AUTH_LOGOUT),
+    syncToken: (token) => invoke(IPC.AUTH_SYNC_TOKEN, token),
     me: () => invoke(IPC.AUTH_ME),
-    changePassword: (input) => invoke(IPC.AUTH_CHANGE_PASSWORD, input),
   },
 
   users: {

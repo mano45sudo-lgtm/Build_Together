@@ -4,9 +4,10 @@ import type { AddressInfo } from 'node:net';
 import { makeAuthLimiter } from '../middlewares/rate-limit.js';
 import { errorHandler } from '../middlewares/error-handler.js';
 import { requestLog } from '../middlewares/request-log.js';
-import { PASSWORD, resetDb, TestApi } from '../test/harness.js';
 import { prisma } from '../lib/prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { mintClerkToken, resetClerkFixtures } from '../test/clerk-fixtures.js';
+import { resetDb, TestApi } from '../test/harness.js';
 
 /**
  * Security-focused checks (brief §13): brute-force throttling, error hygiene (no internal leakage),
@@ -66,6 +67,7 @@ describe('security over the live API', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    resetClerkFixtures();
   });
 
   it('never leaks stack traces / internal messages in error envelopes', async () => {
@@ -75,41 +77,21 @@ describe('security over the live API', () => {
     expect(raw).not.toMatch(/at Object|node_modules|PrismaClient|SELECT|passwordHash/i);
   });
 
-  it('is SQL-injection safe: adversarial email input is rejected, never executed', async () => {
-    // Parameterized ORM + email validation means a payload is just an invalid email (400), and it
-    // cannot be persisted. We assert no user row was created and the response is a clean 400.
+  it('is SQL-injection safe at the identity boundary: adversarial email is stored, never executed', async () => {
+    // Provisioning writes the Clerk-verified email through the parameterized ORM. A hostile payload
+    // is treated as inert data, not SQL: the request succeeds, the User table remains queryable.
     const payload = 'bob\'); DROP TABLE "User";--';
-    const res = await api.post('/api/v1/auth/register', {
-      name: 'Bob',
-      email: payload,
-      password: PASSWORD,
-    });
-    expect(res.status).toBe(400);
-    // The User table still exists and is queryable.
-    await expect(prisma.user.count()).resolves.toBe(0);
+    const token = mintClerkToken({ clerkUserId: 'user_inj', email: payload, name: 'Bob' });
+    const res = await api.get('/api/v1/auth/me', token);
+    expect(res.status).toBe(200);
+    // The table still exists and is countable (the injected DDL never ran).
+    await expect(prisma.user.count()).resolves.toBe(1);
   });
 
-  it('enforces a minimum password length (weak passwords rejected)', async () => {
-    const res = await api.post('/api/v1/auth/register', {
-      name: 'Weak',
-      email: 'weak@example.com',
-      password: 'short',
-    });
-    expect(res.status).toBe(400);
-    expect(res.body.error?.details?.password).toBeInstanceOf(Array);
-  });
-
-  it('does not disclose account existence at login and never returns the hash', async () => {
-    await api.registerAs('Real', 'real@example.com', PASSWORD);
-    const miss = await api.post('/api/v1/auth/login', {
-      email: 'nobody@example.com',
-      password: 'whatever-12345',
-    });
-    const badPw = await api.post('/api/v1/auth/login', {
-      email: 'real@example.com',
-      password: 'whatever-12345',
-    });
-    expect(miss.body.error).toEqual(badPw.body.error);
-    expect(JSON.stringify(miss.body)).not.toMatch(/passwordHash/i);
+  it('rejects an unverified Clerk token with a clean 401 and no internal leakage', async () => {
+    const res = await api.get('/api/v1/auth/me', 'garbage.not.a.jwt');
+    expect(res.status).toBe(401);
+    expect(res.body.error?.code).toBe('INVALID_SESSION');
+    expect(JSON.stringify(res.body)).not.toMatch(/at Object|node_modules|PrismaClient|SELECT/i);
   });
 });

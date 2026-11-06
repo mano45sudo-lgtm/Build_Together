@@ -22,3 +22,13 @@ process.env.INTELLIGENCE_RATE_LIMIT ??= '100000';
 // These are NOT real credentials — no provider call is ever made (a fake provider is injected).
 process.env.NEXCONN_APP_KEY ??= 'test-app-key';
 process.env.NEXCONN_APP_SECRET ??= 'test-app-secret';
+
+// Clerk (ADR-0006): tests never fabricate a real Clerk JWT nor hit live Clerk. Inject the fake
+// verifier + profile seams (see test/clerk-fixtures.ts) so the API's verification boundary, identity
+// mapping and provisioning run end-to-end without live credentials. Imported dynamically AFTER the
+// env defaults above, because `lib/env.ts` (reached via the Clerk module) loads eagerly at import.
+const { installFakeClerkSeams } = await import('./clerk-fixtures.js');
+installFakeClerkSeams();
+
+// Empty export so this file is an ES module (top-level `await` above requires module scope).
+export {};

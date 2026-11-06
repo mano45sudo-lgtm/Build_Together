@@ -3,6 +3,9 @@ import type { AddressInfo } from 'node:net';
 import type { ApiResponse, IssuedSession } from '@buildtogether/shared';
 import { createApp } from '../app.js';
 import { prisma } from '../lib/prisma.js';
+import { currentSession } from '../services/auth.service.js';
+import { resolveInternalIdentity } from '../services/identity.service.js';
+import { mintClerkToken } from './clerk-fixtures.js';
 
 /**
  * Lightweight HTTP harness for real, end-to-end integration tests against the migrated PostgreSQL
@@ -63,17 +66,31 @@ export class TestApi {
     return this.request<T>('DELETE', path, { token });
   }
 
-  /** Register a user and return their issued session (access + refresh tokens) for authorized calls. */
-  async registerAs(name: string, email: string, password: string): Promise<IssuedSession> {
-    const res = await this.post<IssuedSession>('/api/v1/auth/register', { name, email, password });
-    if (res.status !== 201 || !res.body.data) {
-      throw new Error(`registerAs failed: ${res.status} ${JSON.stringify(res.body.error)}`);
-    }
-    return res.body.data;
+  /**
+   * Sign a user in through the Clerk path (ADR-0006): mint a Clerk identity, resolve/provision the
+   * internal user by `clerkUserId`, and return an `IssuedSession` whose `accessToken` is the bearer
+   * token the fake verifier accepts. `password` is vestigial (Clerk owns credentials) but kept in
+   * the signature so the many suites that pass it positionally are unchanged.
+   */
+  async registerAs(name: string, email: string, _password?: string): Promise<IssuedSession> {
+    const clerkUserId = `user_${email.toLowerCase()}`;
+    const accessToken = mintClerkToken({ clerkUserId, email, name });
+    const user = await resolveInternalIdentity(clerkUserId);
+    const session = await currentSession(user.id);
+    const farFuture = new Date(Date.now() + 3_600_000).toISOString();
+    return {
+      tokens: {
+        accessToken,
+        refreshToken: accessToken,
+        accessExpiresAt: farFuture,
+        refreshExpiresAt: farFuture,
+      },
+      session,
+    };
   }
 
-  /** Convenience: register and return just the access token. */
-  async tokenFor(name: string, email: string, password: string): Promise<IssuedSession> {
+  /** Convenience: sign in and return the issued session (access token + view). */
+  async tokenFor(name: string, email: string, password?: string): Promise<IssuedSession> {
     return this.registerAs(name, email, password);
   }
 }
@@ -105,7 +122,7 @@ export async function resetDb(): Promise<void> {
 
 const STRONG = 'Corr3ct-Horse-Battery';
 
-/** Create a user through the API and return its issued session. */
+/** Sign a user in through the Clerk path and return its issued session. */
 export async function makeUser(api: TestApi, label: string): Promise<IssuedSession> {
   return api.registerAs(label, `${label.toLowerCase()}@example.com`, STRONG);
 }

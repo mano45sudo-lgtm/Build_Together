@@ -1,12 +1,14 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import { join } from 'node:path';
+import { createClerkBridge } from '@clerk/electron';
+import { storage } from '@clerk/electron/storage';
 import { createWindow, getMainWindow } from './window';
 import { registerIpc } from './ipc';
 import { waitForApiReady } from './api-ready';
 import { registerContentSecurityPolicy, registerPermissionGuards } from './security';
 import { buildApplicationMenu } from './menu';
+import { trustedRendererOrigin } from './config';
 import { handleAppScheme, registerAppScheme } from './protocol';
-import { loadSession } from './session-store';
 
 // A single-instance desktop app: refocus the existing window instead of opening a second one.
 const gotLock = app.requestSingleInstanceLock();
@@ -24,14 +26,41 @@ if (!gotLock) {
   // Privileged scheme registration must happen before app ready.
   registerAppScheme();
 
+  // Clerk owns authentication (ADR-0006). The official `@clerk/electron` bridge wires the renderer's
+  // `@clerk/electron/react` provider to this main process over IPC and persists the encrypted client
+  // token via `storage()` (safeStorage-backed). We already hold the single-instance lock above, so
+  // Clerk must NOT manage it (`manageSingleInstanceLock: false`).
+  //
+  // The `renderer` option is ONLY for a custom protocol scheme (our packaged `app://bundle`) and its
+  // OAuth deep-link transport; Clerk validates that `host` is a bare name (no scheme, no port). Under
+  // `electron-vite dev` the window is served from http://localhost:<port>, which is not a custom scheme
+  // and cannot be expressed here, so we OMIT `renderer` in dev — Clerk's token-cache IPC still works
+  // (that is what `isLoaded`/`getToken` rely on); only OAuth callbacks are skipped, and no OAuth
+  // provider is configured yet. Packaged / `BT_PROD` builds (app://bundle) pass it normally.
+  const rendererOrigin = new URL(trustedRendererOrigin());
+  const isCustomScheme =
+    rendererOrigin.protocol !== 'http:' && rendererOrigin.protocol !== 'https:';
+  const clerkBridge = createClerkBridge({
+    storage: storage(),
+    ...(isCustomScheme
+      ? {
+          renderer: {
+            scheme: rendererOrigin.protocol.replace(/:$/, ''),
+            host: rendererOrigin.hostname,
+          },
+        }
+      : {}),
+    manageSingleInstanceLock: false,
+  });
+  app.on('before-quit', () => clerkBridge.cleanup());
+
   void app.whenReady().then(async () => {
     handleAppScheme(join(__dirname, '../renderer'));
     registerContentSecurityPolicy();
     registerPermissionGuards();
-    // Restore any encrypted session AND wait for the API (dev only) before the renderer boots, so a
-    // persisted session is recognized rather than raced into a spurious signed-out state. These are
-    // independent, so run them together. Production returns from waitForApiReady immediately.
-    await Promise.all([loadSession(), waitForApiReady()]);
+    // Wait for the API (dev only) before the renderer boots. Clerk restores any persisted session on
+    // its own (no main-process session load here); production returns from waitForApiReady immediately.
+    await waitForApiReady();
     registerIpc();
     Menu.setApplicationMenu(buildApplicationMenu());
     createWindow();

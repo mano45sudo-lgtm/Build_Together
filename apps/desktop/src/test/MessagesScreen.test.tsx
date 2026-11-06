@@ -4,6 +4,7 @@ import type { AuthSessionView, ConversationSummary, IpcOutcome } from '@buildtog
 import { MessagesScreen } from '../features/messages/MessagesScreen';
 import { AuthProvider } from '../state/AuthProvider';
 import type { ChatMessage } from '../lib/chat-client';
+import { signInAsClerk } from './clerk';
 
 /**
  * Renderer tests for the Phase 3 Messages surface (brief §12). The Web-IMLib transport (`chat-client`)
@@ -97,7 +98,7 @@ const ok = <T,>(data: T): Promise<IpcOutcome<T>> => Promise.resolve({ ok: true, 
 
 function installBridge(conversations: ConversationSummary[] = [conversation]) {
   const bridge = {
-    auth: { me: () => ok(session) },
+    auth: { syncToken: () => ok(null), me: () => ok(session) },
     members: { list: () => ok([]) },
     chat: {
       getToken: () => ok({ appKey: 'k', token: 't', userId: 'bt-u_1', expiresAt: '' }),
@@ -134,6 +135,7 @@ beforeEach(() => {
       outgoing: true,
     }));
   installBridge();
+  signInAsClerk();
 });
 
 afterEach(() => {

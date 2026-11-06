@@ -1,9 +1,12 @@
 # ADR-0003: Authentication & session architecture
 
-- **Status:** Accepted
+- **Status:** Accepted — **partially superseded by [ADR-0006](./ADR-0006-clerk-authentication.md)**
+  (authentication is now delegated to Clerk; the credential issuance/validation and in-house session
+  store below are replaced, while the transport, workspace-isolation and main-process-caller
+  invariants are retained and amended by ADR-0006)
 - **Date:** 2026-11-03
 - **Deciders:** Principal Architect
-- **Related:** [ADR-0001](./ADR-0001-technology-stack.md), [ADR-0002](./ADR-0002-desktop-framework.md), [desktop-architecture.md](../architecture/desktop-architecture.md), [security-guidelines.md](../engineering/security-guidelines.md)
+- **Related:** [ADR-0001](./ADR-0001-technology-stack.md), [ADR-0002](./ADR-0002-desktop-framework.md), [ADR-0006](./ADR-0006-clerk-authentication.md), [desktop-architecture.md](../architecture/desktop-architecture.md), [security-guidelines.md](../engineering/security-guidelines.md)
 
 ## Context
 
