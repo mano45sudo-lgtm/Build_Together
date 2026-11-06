@@ -850,7 +850,25 @@ desktop app. No authentication logic was removed and no future-phase features we
 ### Compact dark auth adjustment
 
 Following the user's visual feedback, changed the auth shell from the stretched light
-presentation to a compact, centered dark panel (`max-width: 860px`) with the original orange
-graphic treatment retained at a smaller scale. Re-themed Clerk's labels, fields, Google
-button, divider and primary action for dark contrast. Auth flow code is unchanged. Validation
-for this follow-up is pending.
+presentation to a compact, centered dark panel (`max-width: 860px`) with the graphic treatment
+retained at a smaller scale. Re-themed Clerk's labels, fields, Google button, divider and
+primary action for dark contrast. Auth flow code is unchanged. Typecheck, build and UI scan
+passed for this follow-up.
+
+### Design-system and overflow correction
+
+Applied after review of the clipped card screenshots: the auth panel now scrolls within a
+viewport-bounded compact card so tall Clerk states remain reachable without cutting off the
+card edges. Replaced auth-only orange colors and typography overrides with the app's
+monochrome tokens, Inter/system font stack, near-white primary action, and neutral gray
+decoration. No auth flow code changed.
+
+### Clerk horizontal overflow correction
+
+After the next screenshot showed the right side of the auth card cut off, changed the
+responsive grid tracks to `minmax(0, …)` and moved the two-column breakpoint to wide
+windows only. Added min-width constraints to Clerk's root, card, social button and form
+inputs, and constrained the auth content column. This specifically addresses intrinsic
+minimum widths from Clerk's prebuilt controls expanding past the viewport. Desktop typecheck,
+build, and Impeccable detector passed; visual confirmation against the running app remains
+unavailable in this turn.

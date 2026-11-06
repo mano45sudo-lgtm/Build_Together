@@ -30,7 +30,7 @@ const MessagesScreen = lazy(() =>
 
 const clerkAppearance = {
   variables: {
-    colorPrimary: '#c2410c',
+    colorPrimary: '#fafafa',
     colorBackground: '#111111',
     colorText: '#f5f5f5',
     colorTextSecondary: '#a1a1aa',
@@ -39,31 +39,47 @@ const clerkAppearance = {
     colorDanger: '#f87171',
     colorSuccess: '#4ade80',
     borderRadius: '0.5rem',
-    fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
+    fontFamily:
+      "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   },
   elements: {
     footer: { display: 'none' },
-    card: { boxShadow: 'none', background: 'transparent', padding: '0' },
-    cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%' },
-    rootBox: { width: '100%', maxWidth: '100%' },
+    card: {
+      boxShadow: 'none',
+      background: 'transparent',
+      padding: '0',
+      width: '100%',
+      maxWidth: '100%',
+    },
+    cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%', minWidth: '0' },
+    rootBox: { width: '100%', maxWidth: '100%', minWidth: '0' },
     headerTitle: { display: 'none' },
     headerSubtitle: { display: 'none' },
-    formButtonPrimary: { backgroundColor: '#c2410c', color: '#111111' },
+    formButtonPrimary: {
+      backgroundColor: '#fafafa',
+      color: '#090909',
+      boxShadow: 'none',
+    },
     socialButtonsBlockButton: {
+      width: '100%',
+      maxWidth: '100%',
+      minWidth: '0',
       backgroundColor: 'transparent',
       color: '#e5e5e5',
-      borderColor: '#2a2a2a',
+      borderColor: '#262626',
     },
     formFieldLabel: { color: '#e5e5e5' },
     formFieldInput: {
+      width: '100%',
+      minWidth: '0',
       backgroundColor: '#252529',
       color: '#f5f5f5',
-      borderColor: '#34343a',
+      borderColor: '#3a3a3a',
     },
     dividerLine: { backgroundColor: '#303036' },
     dividerText: { color: '#a1a1aa' },
     footerActionText: { color: '#a1a1aa' },
-    footerActionLink: { color: '#fdba74' },
+    footerActionLink: { color: '#fafafa' },
   },
 } as const;
 
