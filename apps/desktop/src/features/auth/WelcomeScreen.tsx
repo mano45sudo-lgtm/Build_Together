@@ -1,86 +1,75 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Hammer } from 'lucide-react';
 import { motion } from 'motion/react';
-import { SignIn, SignUp } from '@clerk/electron/react';
+import { SignIn, SignUp, useAuth as useClerkAuth } from '@clerk/electron/react';
 import { BrandMarkBackground, SoftLighting } from '../../components/visuals';
 
 type Mode = 'signin' | 'signup';
 
-/**
- * The entry gate. Clerk owns authentication end-to-end (ADR-0006), so this screen mounts Clerk's own
- * prebuilt `<SignIn/>` / `<SignUp/>` components (themed to the Monochrome palette via `ClerkProvider`'s
- * `appearance`). Clerk handles the full flow — credential capture, email-code verification, session
- * activation (`finalize`), and password reset — which is why we no longer hand-roll it: a custom hook
- * flow that forgets to activate the session is exactly what produced "created but signed out".
- *
- * Layout: the brand lockup sits centered above a single elevated card that contains BOTH the mode tabs
- * and the mounted Clerk form. Clerk's own card chrome is stripped in the provider `appearance`, so this
- * surface is the only visible container — the form no longer floats loose on the canvas.
- *
- * The tabs are the single source of truth for which component is mounted; Clerk's own footer cross-links
- * are hidden in the provider `appearance` so there are no dead in-page links. On any successful sign
- * in/up, the active Clerk session is picked up by `AuthProvider`, which syncs a short-lived JWT to the
- * trusted main process and pulls the sanitized `me` view. No token ever appears on this screen.
- */
+/** Clerk's prebuilt components own credential entry, verification and OAuth flows. */
 export function WelcomeScreen() {
   const [mode, setMode] = useState<Mode>('signin');
+  const { isLoaded } = useClerkAuth();
+  const [clerkTimedOut, setClerkTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded) {
+      setClerkTimedOut(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setClerkTimedOut(true), 12_000);
+    return () => window.clearTimeout(timeout);
+  }, [isLoaded]);
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-canvas px-6 py-12 text-primary">
-      {/* Brand moment: an oversized ghost of the BuildTogether mark in the lower-right negative space,
-          with a whisper of top lighting. Decorative only — the auth card sits above it at z-10. */}
-      <BrandMarkBackground size={420} className="-right-16 -bottom-16" />
-      <SoftLighting position="top" size="70% 60%" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-        className="relative z-10 w-full max-w-[26rem]"
-      >
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-2">
-            <Hammer className="size-5 text-accent" aria-hidden="true" />
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">BuildTogether</div>
-            <div className="text-2xs text-muted">From conversation to completion.</div>
-          </div>
-        </div>
-
-        {/* One contained surface: the tabs and the Clerk form share a single card so the flow reads as
-            a cohesive unit. Clerk renders in a shadow root, so its width is driven by the provider
-            `appearance.rootBox`/`cardBox`, not by outer Tailwind selectors. */}
-        <div className="rounded-xl border border-border-subtle bg-surface-1 p-6 shadow-lg shadow-black/20">
-          <div
-            className="mb-6 flex gap-1 rounded-lg border border-border-subtle bg-surface-2 p-1"
-            role="tablist"
-            aria-label="Authentication mode"
-          >
-            {(['signin', 'signup'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={mode === m}
-                onClick={() => setMode(m)}
-                className={
-                  'flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 ' +
-                  (mode === m ? 'bg-surface-3 text-primary' : 'text-secondary hover:text-primary')
-                }
-              >
-                {m === 'signin' ? 'Sign in' : 'Sign up'}
-              </button>
-            ))}
+    <main className="relative min-h-screen w-full overflow-y-auto bg-canvas text-primary">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <BrandMarkBackground size={420} className="-right-16 -bottom-16" />
+        <SoftLighting position="top" size="70% 60%" />
+      </div>
+      <div className="relative z-10 flex min-h-screen w-full items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+          className="w-full min-w-0 max-w-[26rem]"
+        >
+          <div className="mb-6 flex items-center justify-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-2">
+              <Hammer className="size-5 text-accent" aria-hidden="true" />
+            </div>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold">BuildTogether</div>
+              <div className="text-2xs text-muted">From conversation to completion.</div>
+            </div>
           </div>
 
-          {/* Clerk renders its own form; hash routing keeps navigation in the URL fragment (no
-              server-side path handling), which is what the Electron renderer can serve. */}
-          <div className="flex w-full justify-center">
-            {mode === 'signup' ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
-          </div>
-        </div>
-      </motion.div>
-    </div>
+          <section className="w-full min-w-0 rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-lg shadow-black/20 sm:p-6">
+            <div className="mb-6 flex gap-1 rounded-lg border border-border-subtle bg-surface-2 p-1" role="tablist" aria-label="Authentication mode">
+              {(['signin', 'signup'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === value}
+                  onClick={() => setMode(value)}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === value ? 'bg-surface-3 text-primary' : 'text-secondary hover:text-primary'}`}
+                >
+                  {value === 'signin' ? 'Sign in' : 'Sign up'}
+                </button>
+              ))}
+            </div>
+            <div className="flex w-full min-w-0 justify-center overflow-hidden">
+              {mode === 'signup' ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
+            </div>
+          </section>
+
+          {clerkTimedOut && <p role="alert" className="mt-4 rounded-lg border border-border-default bg-surface-1 p-3 text-sm text-secondary">
+            Clerk is taking longer than expected. Check the allowed renderer origins in Clerk Dashboard, then{' '}
+            <button type="button" onClick={() => window.location.reload()} className="font-medium text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">reload</button>.
+          </p>}
+        </motion.div>
+      </div>
+    </main>
   );
 }

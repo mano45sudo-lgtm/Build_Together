@@ -1,0 +1,58 @@
+# electron-builder configuration for the BuildTogether desktop app.
+#
+# WHY THIS EXISTS: Clerk's Electron OAuth (Google/SSO) completes by opening the provider in the system
+# browser and returning to the app through a `app://` deep link. Per Clerk's official docs, that deep
+# link only reaches a PACKAGED app — never `electron-vite dev` — and the OS must know that `app://`
+# belongs to this executable. Two things register it:
+#   1. `protocols` below — the NSIS installer writes the `app` scheme into the Windows registry.
+#   2. At runtime, Clerk's `createClerkBridge({ renderer: { scheme: 'app', host: 'bundle' } })` also
+#      calls `app.setAsDefaultProtocolClient('app')`, self-registering the running executable.
+# The renderer is served from `app://bundle` in packaged builds (see electron/main/protocol.ts), so the
+# OAuth redirect origin and the document origin match — which is exactly what Clerk requires.
+#
+# Still required outside this repo (Clerk Dashboard): add `app://bundle` to the instance `allowed_origins`
+# and allowlist the redirect URL `app://bundle/` under Native applications → "Allowlist for mobile SSO
+# redirect". Test the flow with `pnpm --filter @buildtogether/desktop package`, install, and launch.
+
+appId: com.buildtogether.desktop
+productName: BuildTogether
+copyright: Copyright © 2026 BuildTogether
+
+directories:
+  buildResources: build
+  output: release
+
+# Ship the electron-vite output (`out/`) plus production `node_modules` and package.json. Everything
+# under `files` is an exclusion pattern (electron-builder includes the rest by default), so the main
+# process's externalized runtime deps (`@clerk/electron`, `electron-store`) are carried automatically.
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!vitest.config.ts'
+  - '!{tsconfig.json,tsconfig.*.json,tsconfig.build.json}'
+  - '!{.env,.env.*,.eslintrc,.prettierrc,pnpm-lock.yaml}'
+  - '!**/*.map'
+  - '!**/*.tsbuildinfo'
+  - '!release/**'
+
+asar: true
+
+# Registers the custom protocol so the OS routes `app://bundle/...` OAuth callbacks back to us.
+protocols:
+  - name: BuildTogether
+    schemes:
+      - app
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: BuildTogether

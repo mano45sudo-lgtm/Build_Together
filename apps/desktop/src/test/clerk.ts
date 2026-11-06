@@ -28,3 +28,8 @@ export function signOutFromClerk(): void {
   h.state.isSignedIn = false;
   h.state.userId = null;
 }
+
+/** Hold Clerk in its boot state to verify the app still mounts the auth screen. */
+export function setClerkLoaded(loaded: boolean): void {
+  holder().state.isLoaded = loaded;
+}

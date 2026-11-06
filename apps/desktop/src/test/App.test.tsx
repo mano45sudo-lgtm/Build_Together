@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import type { AuthSessionView, DesktopBridge, IpcOutcome } from '@buildtogether/shared';
 import { App } from '../App';
-import { signInAsClerk } from './clerk';
+import { signInAsClerk, setClerkLoaded } from './clerk';
 
 /**
  * Renderer component tests (brief §13). Outside Electron the bridge is absent, so the app must show
@@ -109,13 +109,17 @@ afterEach(() => {
 describe('desktop shell', () => {
   it('shows the sign-in gate when there is no authenticated session', async () => {
     render(<App />);
-    // Clerk owns the auth UI (ADR-0006): the gate mounts Clerk's SignIn component (stubbed in the
-    // test mock) and offers Monochrome tabs to switch between sign-in and sign-up.
-    expect(
-      await screen.findByRole('heading', { name: /sign in to your account/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /sign up/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign up/i })).toBeInTheDocument();
+  });
+
+  it('keeps Clerk sign-in mounted while Clerk is still initializing', async () => {
+    setClerkLoaded(false);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
   });
 
   it('renders the authenticated shell and active workspace once a session exists', async () => {

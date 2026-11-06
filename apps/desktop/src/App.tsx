@@ -27,13 +27,6 @@ const MessagesScreen = lazy(() =>
   import('./features/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })),
 );
 
-/**
- * Clerk prebuilt `<SignIn/>`/`<SignUp/>` theming (ADR-0006). Clerk renders inside a shadow root, so
- * external Tailwind class names do not reach it — we theme through `variables` (CSS custom properties
- * Clerk applies within its own shadow DOM) and inline style objects for `elements`. The `footer` (with
- * Clerk's own sign-in/sign-up cross-link + branding) is hidden because `WelcomeScreen` owns switching
- * via its Monochrome tabs, so there are no dead in-page links.
- */
 const clerkAppearance = {
   variables: {
     colorPrimary: '#d4d7dc',
@@ -48,8 +41,6 @@ const clerkAppearance = {
   },
   elements: {
     footer: { display: 'none' },
-    // Strip Clerk's own card chrome so the WelcomeScreen surface is the single visible container,
-    // and let the form fill it (Clerk's default card is a fixed ~400px box centered in the root).
     card: { boxShadow: 'none', background: 'transparent', padding: '0' },
     cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%' },
     rootBox: { width: '100%', maxWidth: '100%' },
@@ -68,7 +59,7 @@ function Splash() {
 }
 
 function Shell() {
-  const { status, session, signOut } = useAuth();
+  const { status, session, signOut, clerkLoaded } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
@@ -93,7 +84,7 @@ function Shell() {
     if (activeId === 'messages') setChatMounted(true);
   }, [activeId]);
 
-  if (status === 'checking') return <Splash />;
+  if (status === 'checking' && !clerkLoaded) return <Splash />;
   if (status === 'signed-out' || !session) return <WelcomeScreen />;
 
   const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;

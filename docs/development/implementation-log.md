@@ -3,6 +3,17 @@
 Running record of completed phases. Newest first. Full detail for a phase lives in its
 completion report; this log is the durable summary.
 
+## Clerk authentication repair _(scoped bug fix; no phase transition)_
+
+**Date:** 2026-11-06 · **Status:** Clerk UI restored; allowed origins fixed on the configured development instance; live email delivery and Google OAuth still require runtime verification.
+
+- Replaced the shadow-root Clerk prebuilt widgets with the project-required custom Clerk hook flow using shared design-system controls. Added email/password sign-in, email-code sign-in when supported by the Clerk instance, email-code sign-up verification and session finalization, and Google OAuth with the registered `app://bundle/` deep-link callback.
+- Added visible Clerk/API authentication errors and progress feedback; the form fits the desktop width and can scroll during longer verification steps.
+- Documented the exact Clerk dashboard prerequisites in `apps/desktop/.env.example`. Official Clerk Electron guidance confirms the native API and exact renderer origin must be enabled/allowlisted, and macOS/Linux social OAuth requires a packaged app.
+- Clerk instance: read the configured instance's `allowed_origins` (empty) and added `http://localhost:5173`, `http://localhost:5174`, and `app://bundle` while preserving the existing list. Native API enablement remains a Clerk Dashboard setting and was not exposed in the instance response.
+- Verification: desktop typecheck, focused renderer tests, and production build passed. Live email delivery/OAuth were not run; OAuth callback still needs verification in a packaged Windows app.
+- No phase-gated future features were started.
+
 ---
 
 ## Phase 7 — Execution Intelligence Engine _(deterministic foundation)_

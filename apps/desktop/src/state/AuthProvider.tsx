@@ -26,6 +26,8 @@ export type AuthStatus = 'checking' | 'signed-out' | 'signed-in';
 
 interface AuthContextValue {
   status: AuthStatus;
+  /** Clerk initialization is independent from BuildTogether's API session lookup. */
+  clerkLoaded: boolean;
   session: AuthSessionView | null;
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
@@ -68,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // React to Clerk's auth state: sync the token to main and resolve the sanitized `me` view.
   useEffect(() => {
     if (!isLoaded) {
-      setStatus('checking');
+      clearSession('signed-out');
       return;
     }
 
@@ -149,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const activeWorkspace = session?.workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
     return {
       status,
+      clerkLoaded: isLoaded,
       session,
       workspaces: session?.workspaces ?? [],
       activeWorkspaceId,

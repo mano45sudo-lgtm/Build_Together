@@ -7,8 +7,7 @@ import { registerIpc } from './ipc';
 import { waitForApiReady } from './api-ready';
 import { registerContentSecurityPolicy, registerPermissionGuards } from './security';
 import { buildApplicationMenu } from './menu';
-import { trustedRendererOrigin } from './config';
-import { handleAppScheme, registerAppScheme } from './protocol';
+import { APP_HOST, APP_SCHEME, handleAppScheme } from './protocol';
 
 // A single-instance desktop app: refocus the existing window instead of opening a second one.
 const gotLock = app.requestSingleInstanceLock();
@@ -23,33 +22,23 @@ if (!gotLock) {
     }
   });
 
-  // Privileged scheme registration must happen before app ready.
-  registerAppScheme();
-
   // Clerk owns authentication (ADR-0006). The official `@clerk/electron` bridge wires the renderer's
   // `@clerk/electron/react` provider to this main process over IPC and persists the encrypted client
   // token via `storage()` (safeStorage-backed). We already hold the single-instance lock above, so
   // Clerk must NOT manage it (`manageSingleInstanceLock: false`).
   //
-  // The `renderer` option is ONLY for a custom protocol scheme (our packaged `app://bundle`) and its
-  // OAuth deep-link transport; Clerk validates that `host` is a bare name (no scheme, no port). Under
-  // `electron-vite dev` the window is served from http://localhost:<port>, which is not a custom scheme
-  // and cannot be expressed here, so we OMIT `renderer` in dev — Clerk's token-cache IPC still works
-  // (that is what `isLoaded`/`getToken` rely on); only OAuth callbacks are skipped, and no OAuth
-  // provider is configured yet. Packaged / `BT_PROD` builds (app://bundle) pass it normally.
-  const rendererOrigin = new URL(trustedRendererOrigin());
-  const isCustomScheme =
-    rendererOrigin.protocol !== 'http:' && rendererOrigin.protocol !== 'https:';
+  // `renderer` is ALWAYS passed. It serves two purposes: (1) it names the custom protocol scheme Clerk
+  // uses as the OAuth callback target, and (2) it makes Clerk register that scheme as privileged via
+  // `protocol.registerSchemesAsPrivileged` — so we must NOT also call `registerAppScheme()` here (a
+  // second registration of the same scheme is redundant). The OAuth callback scheme is independent of
+  // how the window is served: in dev the renderer loads from http://localhost:<port>, but the deep link
+  // still returns through `app://bundle`, delivered to this process by Electron's `second-instance`
+  // argv (which Clerk requires us to hold the single-instance lock for on Windows/Linux). Omitting
+  // `renderer` makes Clerk's OAuth transport hard-throw on every social sign-in, which is exactly the
+  // "Continue with Google does nothing" failure — so it is never omitted.
   const clerkBridge = createClerkBridge({
     storage: storage(),
-    ...(isCustomScheme
-      ? {
-          renderer: {
-            scheme: rendererOrigin.protocol.replace(/:$/, ''),
-            host: rendererOrigin.hostname,
-          },
-        }
-      : {}),
+    renderer: { scheme: APP_SCHEME, host: APP_HOST },
     manageSingleInstanceLock: false,
   });
   app.on('before-quit', () => clerkBridge.cleanup());

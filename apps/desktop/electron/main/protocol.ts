@@ -13,7 +13,13 @@ export const APP_SCHEME = 'app';
 export const APP_HOST = 'bundle';
 export const RENDERER_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
-/** Must run before `app` is ready. */
+/**
+ * Registers the `app` scheme as privileged. Retained for standalone use, but in the normal boot path
+ * Clerk's `createClerkBridge({ renderer })` already registers this same scheme (with a superset of
+ * privileges) before `app` is ready, so `index.ts` does not call this — calling it as well would be a
+ * redundant double registration. Kept here so the scheme/privileges contract stays documented next to
+ * the handler that serves it.
+ */
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {

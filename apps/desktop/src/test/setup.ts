@@ -26,6 +26,7 @@ const clerk = vi.hoisted(() => {
     signIn: {
       status: 'needs_identifier',
       createdSessionId: null,
+      sso: noError,
       create: noError,
       password: noError,
       finalize: noError,
@@ -36,6 +37,8 @@ const clerk = vi.hoisted(() => {
     signUp: {
       status: 'missing_requirements',
       createdSessionId: null,
+      unverifiedFields: [] as string[],
+      sso: noError,
       create: noError,
       password: noError,
       finalize: noError,
@@ -54,25 +57,16 @@ vi.mock('@clerk/electron/react', () => ({
     getToken: clerk.getToken,
     signOut: clerk.signOut,
   }),
+  SignIn: () => createElement('div', null,
+    createElement('h1', null, 'Sign in to your account'),
+    createElement('input', { 'aria-label': 'Email', type: 'email' }),
+    createElement('input', { 'aria-label': 'Password', type: 'password' }),
+    createElement('button', { type: 'button' }, 'Continue with Google'),
+    createElement('a', { href: '#/sign-up' }, 'Sign up'),
+  ),
+  SignUp: () => createElement('div', null, createElement('h1', null, 'Create your account')),
   useSignIn: () => ({ signIn: clerk.signIn, errors: {}, fetchStatus: 'idle' }),
   useSignUp: () => ({ signUp: clerk.signUp, errors: {}, fetchStatus: 'idle' }),
-  // WelcomeScreen mounts Clerk's prebuilt components. jsdom cannot run real Clerk, so these are
-  // minimal, honest stubs that render the same accessible landmarks (a heading + an email field) the
-  // real components do, letting tests assert the sign-in gate without fabricating auth behaviour.
-  SignIn: () =>
-    createElement(
-      'div',
-      { 'data-testid': 'clerk-sign-in' },
-      createElement('h1', null, 'Sign in to your account'),
-      createElement('input', { 'aria-label': 'Email', type: 'email' }),
-    ),
-  SignUp: () =>
-    createElement(
-      'div',
-      { 'data-testid': 'clerk-sign-up' },
-      createElement('h1', null, 'Create your account'),
-      createElement('input', { 'aria-label': 'Email', type: 'email' }),
-    ),
 }));
 
 // Register the holder on globalThis so the typed test helper (src/test/clerk.ts) can drive the state.

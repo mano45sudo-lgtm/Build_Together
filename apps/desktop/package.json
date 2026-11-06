@@ -11,8 +11,8 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "package": "electron-builder",
-    "package:dir": "electron-builder --dir"
+    "package": "electron-vite build && electron-builder",
+    "package:dir": "electron-vite build && electron-builder --dir"
   },
   "dependencies": {
     "@buildtogether/shared": "workspace:*",
