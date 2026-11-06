@@ -16,6 +16,7 @@ completion report; this log is the durable summary.
 - Follow-up checks: desktop typecheck passed; focused renderer + protocol registration tests passed (6 tests); desktop production build passed. Windows callback was not live-retested because a second Electron instance was not available in the single-instance session.
 - Follow-up from first-time Google sign-in: the shell could render the signed-out Clerk screen while Clerk had authenticated the user but the API was still resolving/provisioning the internal profile (`!session` was treated as signed-out). Keep the app in a distinct finishing state, bound the Clerk/API handoff to 20 seconds, and show a retry/sign-out recovery screen with the safe API error when provisioning fails. The Clerk prebuilt UI and existing welcome design remain untouched. Live OAuth/account provisioning still requires retesting with the reported Google accounts.
 - Runtime follow-up after the report persisted: the open Electron window is rendering Clerk's signed-out screen. The Windows `app` protocol registry command points at the Electron executable + desktop app path. At inspection time there was no listener on API `:4000`, renderer `:5173`, or PostgreSQL `:5432`; `apps/api/.env` has neither `CLERK_SECRET_KEY` nor `CLERK_JWT_KEY`, and `apps/desktop/.env` is absent. A new identity cannot be provisioned without the server Clerk secret, and the API/database/renderer need to be running. Updated the API env example and renderer recovery copy to identify these setup failures; no credentials were created or exposed. Docker engine was inaccessible from this session, so PostgreSQL could not be started here. Live OAuth remains unverified.
+- Auth screen visual update: adapted the supplied split-panel reference into the feature auth layout, replaced its hammer mark with a sunburst, and used BuildTogether product copy. Clerk's existing prebuilt `SignIn`/`SignUp` remain the credential/OAuth controls; the existing Google button and OAuth path are retained rather than replaced with the reference's demo form.
 - No phase-gated future features were started.
 
 ---
@@ -814,3 +815,42 @@ No login/registration, workspaces, chat, Nexconn integration, tasks, Kanban, Dec
 AI, dashboards, or fake UI screens were implemented. **No future-phase features were added.**
 
 **Phase 0 status: READY FOR PHASE 1.**
+
+## Auth screen visual correction — CUE reference
+
+### Scope
+
+Restored the supplied black/orange and light-panel composition for the Clerk auth screen,
+using the product name CUE. This is a presentation-only correction: Clerk continues to own
+sign-in, sign-up, email verification/OTP and Google OAuth.
+
+### Changes
+
+- Replaced the auth shell's dark ring treatment with the reference's black left panel,
+  vertical orange/black graphic bands and lower orange/white orb, plus a light right form
+  panel and orange sun icon.
+- Styled Clerk's existing prebuilt form for the light panel and suppressed its duplicate
+  heading. Its Google social control and credential/verification flow remain Clerk-managed.
+- Updated the desktop window title and auth loading label to CUE.
+- No dependency changes.
+
+### Validation
+
+- `pnpm --filter @buildtogether/desktop typecheck` — passed.
+- `pnpm --filter @buildtogether/desktop build` — passed (2208 renderer modules); existing
+  RongCloud `path` browser-externalization warning remains.
+- Automated tests and interactive Clerk/OAuth verification were not run.
+
+### Status and remaining work
+
+Auth UI implementation is complete. Actual email delivery and Google OAuth still depend on
+Clerk dashboard configuration and runtime credentials; verify those flows in the configured
+desktop app. No authentication logic was removed and no future-phase features were added.
+
+### Compact dark auth adjustment
+
+Following the user's visual feedback, changed the auth shell from the stretched light
+presentation to a compact, centered dark panel (`max-width: 860px`) with the original orange
+graphic treatment retained at a smaller scale. Re-themed Clerk's labels, fields, Google
+button, divider and primary action for dark contrast. Auth flow code is unchanged. Validation
+for this follow-up is pending.

@@ -30,26 +30,45 @@ const MessagesScreen = lazy(() =>
 
 const clerkAppearance = {
   variables: {
-    colorPrimary: '#d4d7dc',
-    colorBackground: '#14171c',
-    colorText: '#e6e8eb',
-    colorTextSecondary: '#9aa0a8',
-    colorInputBackground: '#0f1216',
-    colorInputText: '#e6e8eb',
+    colorPrimary: '#c2410c',
+    colorBackground: '#111111',
+    colorText: '#f5f5f5',
+    colorTextSecondary: '#a1a1aa',
+    colorInputBackground: '#252529',
+    colorInputText: '#f5f5f5',
     colorDanger: '#f87171',
     colorSuccess: '#4ade80',
     borderRadius: '0.5rem',
+    fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
   },
   elements: {
     footer: { display: 'none' },
     card: { boxShadow: 'none', background: 'transparent', padding: '0' },
     cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%' },
     rootBox: { width: '100%', maxWidth: '100%' },
+    headerTitle: { display: 'none' },
+    headerSubtitle: { display: 'none' },
+    formButtonPrimary: { backgroundColor: '#c2410c', color: '#111111' },
+    socialButtonsBlockButton: {
+      backgroundColor: 'transparent',
+      color: '#e5e5e5',
+      borderColor: '#2a2a2a',
+    },
+    formFieldLabel: { color: '#e5e5e5' },
+    formFieldInput: {
+      backgroundColor: '#252529',
+      color: '#f5f5f5',
+      borderColor: '#34343a',
+    },
+    dividerLine: { backgroundColor: '#303036' },
+    dividerText: { color: '#a1a1aa' },
+    footerActionText: { color: '#a1a1aa' },
+    footerActionLink: { color: '#fdba74' },
   },
 } as const;
 
 /** Boot splash shown while the persisted desktop session is being restored. */
-function Splash({ message = 'Loading BuildTogether…' }: { message?: string }) {
+function Splash({ message = 'Loading CUE…' }: { message?: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
       <Hammer className="size-5 text-accent" aria-hidden="true" />
@@ -113,7 +132,7 @@ function Shell() {
   }, [activeId]);
 
   if (status === 'checking')
-    return <Splash message={clerkLoaded ? 'Finishing sign-in…' : 'Loading BuildTogether…'} />;
+    return <Splash message={clerkLoaded ? 'Finishing sign-in…' : 'Loading CUE…'} />;
   if (status === 'error') {
     return (
       <AuthRecovery
