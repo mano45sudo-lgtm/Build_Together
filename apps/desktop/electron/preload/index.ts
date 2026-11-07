@@ -30,6 +30,24 @@ const bridge: DesktopBridge = {
   window: {
     minimize: () => invoke(IPC.WINDOW_MINIMIZE),
     toggleMaximize: () => invoke(IPC.WINDOW_TOGGLE_MAXIMIZE),
+    toggleFullScreen: () => invoke(IPC.WINDOW_TOGGLE_FULLSCREEN),
+    getState: () => invoke(IPC.WINDOW_GET_STATE),
+    onStateChanged: (listener) => {
+      const onStateChanged = (_event: Electron.IpcRendererEvent, value: unknown) => {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          'isMaximized' in value &&
+          typeof value.isMaximized === 'boolean' &&
+          'isFullScreen' in value &&
+          typeof value.isFullScreen === 'boolean'
+        ) {
+          listener({ isMaximized: value.isMaximized, isFullScreen: value.isFullScreen });
+        }
+      };
+      ipcRenderer.on(IPC.WINDOW_STATE_CHANGED, onStateChanged);
+      return () => ipcRenderer.removeListener(IPC.WINDOW_STATE_CHANGED, onStateChanged);
+    },
     close: () => invoke(IPC.WINDOW_CLOSE),
   },
 

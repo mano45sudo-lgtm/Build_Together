@@ -6,6 +6,7 @@ import { Dialog } from './components/ui/Dialog';
 import { Button } from './components/ui/Button';
 import { Input } from './components/ui/Input';
 import { Spinner } from './components/ui/Spinner';
+import { DesktopWindowFrame } from './components/DesktopWindowFrame';
 import { NAV_ITEMS, type NavId } from './lib/nav';
 import { AuthProvider, useAuth } from './state/AuthProvider';
 import { WelcomeScreen } from './features/auth/WelcomeScreen';
@@ -86,7 +87,7 @@ const clerkAppearance = {
 /** Boot splash shown while the persisted desktop session is being restored. */
 function Splash({ message = 'Loading CUE…' }: { message?: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
+    <div className="flex h-full min-h-0 items-center justify-center gap-3 bg-canvas text-secondary">
       <Hammer className="size-5 text-accent" aria-hidden="true" />
       <Spinner />
       <span className="text-sm">{message}</span>
@@ -104,7 +105,7 @@ function AuthRecovery({
   onSignOut: () => void;
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-6 text-primary">
+    <main className="flex h-full min-h-0 items-center justify-center bg-canvas px-6 text-primary">
       <section className="w-full max-w-md rounded-xl border border-border-subtle bg-surface-1 p-6">
         <h1 className="text-lg font-semibold">Couldn’t finish signing in</h1>
         <p role="alert" className="mt-3 text-sm leading-6 text-secondary">
@@ -121,7 +122,7 @@ function AuthRecovery({
   );
 }
 
-function Shell() {
+function ShellContent() {
   const { status, session, signOut, clerkLoaded, authError, retryAuth } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -154,7 +155,7 @@ function Shell() {
       <AuthRecovery
         message={
           authError ??
-          'Your account returned from Clerk, but BuildTogether could not finish setting up your session.'
+          'Your account returned from Clerk, but CUE could not finish setting up your session.'
         }
         onRetry={retryAuth}
         onSignOut={() => void signOut()}
@@ -242,7 +243,7 @@ function Shell() {
         title="Search"
         description="Search across workspaces, projects and conversations."
       >
-        <Input placeholder="Search BuildTogether…" disabled />
+        <Input placeholder="Search CUE…" disabled />
         <p className="mt-3 text-sm text-secondary">
           Global search is a planned feature and is not wired to the API yet.
         </p>
@@ -262,6 +263,14 @@ function Shell() {
   );
 }
 
+function Shell() {
+  return (
+    <DesktopWindowFrame>
+      <ShellContent />
+    </DesktopWindowFrame>
+  );
+}
+
 export function App() {
   // Clerk owns authentication (ADR-0006). The publishable key is a public, non-secret value that must
   // be provided via the environment; without it Clerk cannot initialize, so we surface an explicit
@@ -269,12 +278,14 @@ export function App() {
   const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   if (!publishableKey) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-secondary">
-        <Hammer className="size-5 text-accent" aria-hidden="true" />
-        <span className="text-sm">
-          Authentication is not configured (missing Clerk publishable key).
-        </span>
-      </div>
+      <DesktopWindowFrame>
+        <div className="flex h-full min-h-0 items-center justify-center gap-3 bg-canvas text-secondary">
+          <Hammer className="size-5 text-accent" aria-hidden="true" />
+          <span className="text-sm">
+            Authentication is not configured (missing Clerk publishable key).
+          </span>
+        </div>
+      </DesktopWindowFrame>
     );
   }
   return (

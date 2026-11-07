@@ -1,9 +1,10 @@
 {
   "name": "@buildtogether/desktop",
+  "productName": "Cue",
   "private": true,
   "version": "0.1.0",
   "main": "out/main/index.js",
-  "description": "BuildTogether desktop Builder Workspace (Electron main/preload + React renderer).",
+  "description": "Cue desktop collaboration application (Electron + React).",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

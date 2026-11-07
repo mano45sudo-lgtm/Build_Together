@@ -7,8 +7,7 @@ export interface ProtocolClientRegistrationInput {
 }
 
 export type ProtocolClientRegistration =
-  | { protocol: string; executablePath: string; args: string[] }
-  | { protocol: string };
+  { protocol: string; executablePath: string; args: string[] } | { protocol: string };
 
 /**
  * Electron's generic executable needs the app path when it handles a custom URL in Windows dev.

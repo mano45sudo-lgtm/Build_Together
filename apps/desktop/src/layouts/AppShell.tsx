@@ -35,7 +35,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-canvas text-primary">
+    <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-canvas text-primary">
       <Sidebar
         activeId={activeId}
         accountName={accountName}

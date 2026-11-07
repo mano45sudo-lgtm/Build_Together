@@ -22,6 +22,7 @@ import type {
   DecisionSortField,
   DecisionSource,
   DecisionStatus,
+  DesktopWindowState,
   IpcError,
   IpcOutcome,
   ProjectListQuery,
@@ -531,21 +532,43 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.WINDOW_MINIMIZE, (event) =>
     handle(event, async () => {
       windowOf(event)?.minimize();
+      return null;
     }),
   );
 
   ipcMain.handle(IPC.WINDOW_TOGGLE_MAXIMIZE, (event) =>
     handle(event, async () => {
       const win = windowOf(event);
-      if (!win) return;
+      if (!win) return null;
       if (win.isMaximized()) win.unmaximize();
       else win.maximize();
+      return null;
+    }),
+  );
+
+  ipcMain.handle(IPC.WINDOW_TOGGLE_FULLSCREEN, (event) =>
+    handle(event, async () => {
+      const win = windowOf(event);
+      if (!win) return null;
+      win.setFullScreen(!win.isFullScreen());
+      return null;
+    }),
+  );
+
+  ipcMain.handle(IPC.WINDOW_GET_STATE, (event) =>
+    handle<DesktopWindowState>(event, async () => {
+      const win = windowOf(event);
+      return {
+        isMaximized: win?.isMaximized() ?? false,
+        isFullScreen: win?.isFullScreen() ?? false,
+      };
     }),
   );
 
   ipcMain.handle(IPC.WINDOW_CLOSE, (event) =>
     handle(event, async () => {
       windowOf(event)?.close();
+      return null;
     }),
   );
 

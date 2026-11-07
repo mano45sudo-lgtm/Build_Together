@@ -78,15 +78,23 @@ export interface IpcError {
 /** Every bridge method resolves to a discriminated outcome, never a thrown remote error. */
 export type IpcOutcome<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 
+export interface DesktopWindowState {
+  isMaximized: boolean;
+  isFullScreen: boolean;
+}
+
 /** The API surface the preload bridge exposes on `window.bt`. */
 export interface DesktopBridge {
   getConfig(): Promise<DesktopConfig>;
-  getPlatformInfo(): Promise<{ platform: string; arch: string }>;
+  getPlatformInfo(): Promise<IpcOutcome<{ platform: string; arch: string }>>;
   openExternal(url: string): Promise<{ ok: boolean; reason?: string }>;
   window: {
-    minimize(): Promise<void>;
-    toggleMaximize(): Promise<void>;
-    close(): Promise<void>;
+    minimize(): Promise<IpcOutcome<null>>;
+    toggleMaximize(): Promise<IpcOutcome<null>>;
+    toggleFullScreen(): Promise<IpcOutcome<null>>;
+    getState(): Promise<IpcOutcome<DesktopWindowState>>;
+    onStateChanged(listener: (state: DesktopWindowState) => void): () => void;
+    close(): Promise<IpcOutcome<null>>;
   };
   /**
    * Clerk owns authentication: the renderer drives sign up/in, email verification and password
@@ -298,6 +306,9 @@ export const IPC = {
   OPEN_EXTERNAL: 'app:open-external',
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggle-maximize',
+  WINDOW_TOGGLE_FULLSCREEN: 'window:toggle-fullscreen',
+  WINDOW_GET_STATE: 'window:get-state',
+  WINDOW_STATE_CHANGED: 'window:state-changed',
   WINDOW_CLOSE: 'window:close',
   // Auth (Clerk owns credentials; this bridge only syncs the short-lived session JWT + reads `me`)
   AUTH_SYNC_TOKEN: 'auth:sync-token',

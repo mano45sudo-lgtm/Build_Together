@@ -872,3 +872,58 @@ inputs, and constrained the auth content column. This specifically addresses int
 minimum widths from Clerk's prebuilt controls expanding past the viewport. Desktop typecheck,
 build, and Impeccable detector passed; visual confirmation against the running app remains
 unavailable in this turn.
+
+## Windows standalone CUE shell and installer preparation
+
+### Scope
+
+Prepared the existing Electron desktop client for a standalone Windows x64 CUE distribution.
+The API remains the configured remote service; authentication, OAuth deep-link handling,
+trusted `app://bundle` origin, IPC sender checks, sandbox, context isolation, and disabled
+renderer Node access were retained. No cloud deployment or backend feature work was performed.
+
+### Changes
+
+- Added a Windows-only frameless titlebar with draggable surface, accessible minimize,
+  maximize/restore and close buttons, fullscreen shortcut, and main-process state updates over
+  the existing sender-validated IPC architecture. macOS/Linux retain native window frames.
+- Persisted normal window bounds and maximize state under the existing `BuildTogether` user-data
+  directory to retain Clerk session compatibility; invalid/off-screen bounds recover to the
+  primary display. Added unit coverage for bounds recovery and titlebar interactions.
+- Rebranded the Windows executable, installer, shortcuts, title, app identity, and app chrome to
+  CUE. Added a temporary monochrome CUE fallback `.ico` because the repository has no final logo
+  asset. Kept the existing data directory across the rename.
+- Updated the desktop shell layout to fit below the custom titlebar and documented Windows
+  packaging behavior and known Snap Layout limitation.
+- No dependencies were installed.
+
+### Validation
+
+- `pnpm test` — passed: API 11 files / 171 tests; desktop 8 files / 46 tests.
+- `pnpm typecheck` — passed across shared, API, and desktop packages.
+- `pnpm lint` — passed.
+- `pnpm format:check` — passed.
+- `pnpm desktop:build` — passed (main, preload, renderer); existing RongCloud `path` browser
+  externalization warning remains.
+- `pnpm desktop:package` — failed after app packaging while electron-builder attempted to fetch
+  NSIS from GitHub (`getaddrinfo ENOTFOUND github.com`). NSIS is not cached in this environment.
+- `pnpm --filter @buildtogether/desktop package:dir` — blocked by the same NSIS download
+  requirement, before an unpacked output directory was finalized.
+- A production Electron smoke run recorded in the workspace release logs passed against
+  `app://bundle/index.html`: the React root mounted, bridge config/platform calls succeeded, and
+  no renderer errors fired. An earlier smoke attempt failed because the packaged preload could not
+  resolve `@clerk/electron/preload`; a later recorded run passed after the packaged output was
+  corrected. The current post-change app could not be launched through pnpm in this environment
+  (`electron` command unavailable/not executable), so current native titlebar behavior, current
+  launch/close, installer installation, and uninstallation remain unverified. Windows 11 Snap
+  Layout flyout support is not claimed.
+- The built app bundle is not code-signed; no signing certificate is configured in the repository.
+
+### Status and remaining work
+
+**INCOMPLETE** for the requested standalone installer acceptance criteria: compilation and all
+workspace tests pass, but an installer artifact was not created, and installation/uninstallation
+and native runtime behavior could not be verified because network access to GitHub is unavailable
+and the runtime smoke launch failed. Re-run packaging where NSIS is available, then install,
+launch, verify OAuth/deep-link return, and uninstall on Windows. Final Cue artwork and code signing
+remain deployment inputs. No unauthorized future-phase features were implemented.

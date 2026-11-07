@@ -28,8 +28,8 @@ export function Sidebar({
           <Hammer className="size-4 text-primary" aria-hidden="true" />
         </div>
         <div className="leading-tight">
-          <div className="text-sm font-semibold text-primary">BuildTogether</div>
-          <div className="text-2xs text-muted">Builder Workspace</div>
+          <div className="text-sm font-semibold text-primary">CUE</div>
+          <div className="text-2xs text-muted">From conversation to completion</div>
         </div>
       </div>
 

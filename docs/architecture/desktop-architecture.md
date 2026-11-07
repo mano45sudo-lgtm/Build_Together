@@ -16,7 +16,7 @@ apps/desktop/
       ipc.ts      # ipcMain handlers (every sender origin-validated) + IpcOutcome envelope
       api-client.ts # sole authenticated HTTP client: bearer, refresh-once-on-401, typed ops
       session-store.ts # safeStorage-encrypted token pair in userData; memory-only if unavailable
-      window.ts   # BrowserWindow factory (sandbox, contextIsolation, no nodeIntegration)
+      window.ts   # BrowserWindow factory, saved bounds and maximize/fullscreen state
       protocol.ts # custom app://bundle scheme (secure origin, file-backed, CSP on response)
       menu.ts     # native application menu (roles + Help → openExternal)
     preload/
@@ -25,7 +25,7 @@ apps/desktop/
   src/            # renderer — the React 19 / Vite / Tailwind app (former apps/web)
     main.tsx  App.tsx  index.html
     layouts/AppShell.tsx
-    components/   # Sidebar, ApiStatusIndicator + ui/ primitives (Button, Input, Dialog, Field, ...)
+    components/   # Sidebar, WindowTitleBar, DesktopWindowFrame + ui/ primitives
     features/     # auth (Welcome), workspace (switcher/onboarding), team (members/invites),
                   # chat (messages), projects (list/create/workspace/settings), home, settings
     state/        # AuthProvider (session + workspace scoping for the renderer)
@@ -91,22 +91,40 @@ any packaged build.
 
 ## Build, run & packaging
 
-| Action               | Command                                             | Notes                                                  |
-| -------------------- | --------------------------------------------------- | ------------------------------------------------------ |
-| Dev (HMR + Electron) | `pnpm desktop:dev`                                  | renderer served from `localhost:5173`; dev API `:4000` |
-| Compile bundles      | `pnpm desktop:build`                                | main + preload (CJS) + static renderer → `out/`        |
-| Run built bundle     | `electron apps/desktop` (`BT_PROD=1` for prod path) | prod path loads `app://bundle/index.html`              |
-| Package installers   | `pnpm desktop:package` (`electron-builder`)         | **configured, not run in Phase 1**                     |
+| Action               | Command                                             | Notes                                                   |
+| -------------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| Dev (HMR + Electron) | `pnpm desktop:dev`                                  | renderer served from `localhost:5173`; dev API `:4000`  |
+| Compile bundles      | `pnpm desktop:build`                                | main + preload (CJS) + static renderer → `out/`         |
+| Run built bundle     | `electron apps/desktop` (`BT_PROD=1` for prod path) | prod path loads `app://bundle/index.html`               |
+| Package installer    | `pnpm desktop:package` (`electron-builder`)         | Windows x64 NSIS → `apps/desktop/release/Cue Setup.exe` |
 
 `electron-vite@6` orchestrates the three entries; its peer range (`vite ^6 ‖ ^7 ‖ ^8`) is
 compatible with our Vite 8. `externalizeDepsPlugin` keeps deps external **except**
 `@buildtogether/shared`, which is bundled into main/preload because Node cannot import the
 source-only package at runtime.
 
+### Windows standalone shell
+
+- Windows alone uses `frame: false`; macOS/Linux retain their native frame and existing menu.
+- `WindowTitleBar` supplies draggable CUE branding and Minimize/Maximize-or-Restore/Close
+  controls. Buttons use sender-validated IPC; maximize/fullscreen state is synchronized from
+  the main process. F11 toggles fullscreen and the custom titlebar hides while fullscreen.
+- Drag regions use Electron's `app-region` CSS; controls explicitly opt out with `no-drag`.
+- Normal bounds and maximized state are stored in `window-state.json` in the existing
+  `BuildTogether` user-data directory, preserving the current Clerk/session storage location.
+  Invalid or off-screen saved bounds are recovered onto the primary work area.
+- The NSIS installer is Windows x64, per-user, creates Start Menu and Desktop shortcuts, and
+  includes an uninstaller. It packages only the desktop app; the API remains remote.
+- No production Cue artwork existed in the repository. `build/cue-fallback.ico` is a temporary
+  monochrome CUE monogram used for the executable, installer, and shortcuts until final artwork
+  is supplied.
+- The custom maximize button has not been verified to expose the Windows 11 Snap Layout flyout.
+  Do not promise native Snap Layout flyout support from this implementation.
+
 ## Known limitations
 
-- Packaging/code-signing/auto-update are **not executed** — only the built-bundle production
-  path was smoke-launched; a real installer runtime is untested.
+- Code signing and auto-update are not configured. Installer/build/runtime verification results
+  for the standalone Windows milestone are recorded in `docs/development/implementation-log.md`.
 - Password reset and email verification are not yet implemented (ADR-0003); invitation email
   uses a clearly-labelled **dev transport** (returns the link to the authorized inviter) until a
   real provider is configured.

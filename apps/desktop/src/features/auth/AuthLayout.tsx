@@ -23,7 +23,7 @@ export function AuthLayout({
   children,
 }: AuthLayoutProps) {
   return (
-    <main className="flex min-h-screen w-full items-center justify-center overflow-y-auto bg-canvas p-5 font-sans text-primary sm:p-8">
+    <main className="flex h-full min-h-0 w-full items-center justify-center overflow-y-auto bg-canvas p-5 font-sans text-primary sm:p-8">
       <div className="grid min-w-0 w-full max-w-[820px] grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-xl border border-border-default bg-surface-1 shadow-[0_16px_40px_rgba(0,0,0,0.36)] md:max-h-[calc(100vh-4rem)] lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
         <section
           className="relative flex min-h-[128px] min-w-0 flex-col justify-between overflow-hidden bg-[#090909] px-6 py-5 text-primary sm:px-8 sm:py-6 lg:min-h-[440px]"

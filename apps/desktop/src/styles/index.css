@@ -116,6 +116,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Windows frameless chrome: keep only the title strip draggable; controls opt out below. */
+.window-drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* Keyboard-first, visible focus in monochrome (white ring, never harsh/colored). */
 :focus-visible {
   outline: 2px solid var(--color-accent);

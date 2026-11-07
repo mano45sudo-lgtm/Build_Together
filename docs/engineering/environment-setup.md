@@ -35,9 +35,15 @@ pnpm desktop:dev                       # Electron + renderer (HMR on :5173)
 ```
 
 Desktop scripts (root): `pnpm desktop:dev` · `pnpm desktop:build` (compile
-main/preload/renderer to `out/`) · `pnpm desktop:package` (`electron-builder`, configured —
-not run in Phase 1). Run the built bundle without an installer with
+main/preload/renderer to `out/`) · `pnpm desktop:package` (Windows x64 NSIS installer,
+`apps/desktop/release/Cue Setup.exe`). Run the built bundle without an installer with
 `electron apps/desktop` (set `BT_PROD=1 BT_SMOKE=1` to exercise the production code path).
+
+The Windows installer is per-user, creates Start Menu/Desktop shortcuts, and includes an
+uninstaller. `apps/desktop/build/cue-fallback.ico` is a temporary monochrome CUE monogram
+because no approved Cue icon asset is currently in the repository. Replace it when final
+artwork is supplied. No code-signing certificate is committed; builds are unsigned unless a
+Windows signing certificate is configured in the build environment.
 
 ## PostgreSQL (required from Phase 2)
 

@@ -1,4 +1,4 @@
-# electron-builder configuration for the BuildTogether desktop app.
+# electron-builder configuration for the Cue Windows desktop app.
 #
 # WHY THIS EXISTS: Clerk's Electron OAuth (Google/SSO) completes by opening the provider in the system
 # browser and returning to the app through a `app://` deep link. The OS must know that `app://`
@@ -13,9 +13,11 @@
 # and allowlist the redirect URL `app://bundle/` under Native applications → "Allowlist for mobile SSO
 # redirect". Test the flow with `pnpm --filter @buildtogether/desktop package`, install, and launch.
 
-appId: com.buildtogether.desktop
-productName: BuildTogether
-copyright: Copyright © 2026 BuildTogether
+appId: com.cue.desktop
+productName: Cue
+executableName: Cue
+artifactName: Cue Setup.${ext}
+copyright: Copyright © 2026 Cue
 
 directories:
   buildResources: build
@@ -40,13 +42,16 @@ asar: true
 
 # Registers the custom protocol so the OS routes `app://bundle/...` OAuth callbacks back to us.
 protocols:
-  - name: BuildTogether
+  - name: Cue
     schemes:
       - app
 
 win:
+  icon: build/cue-fallback.ico
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 
 nsis:
   oneClick: false
@@ -54,4 +59,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: BuildTogether
+  shortcutName: Cue
+  installerIcon: build/cue-fallback.ico
+  uninstallerIcon: build/cue-fallback.ico

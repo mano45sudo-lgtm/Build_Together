@@ -71,7 +71,7 @@ export function buildApplicationMenu(): Menu {
       role: 'help',
       submenu: [
         {
-          label: 'Learn more about BuildTogether',
+          label: 'Learn more about Cue',
           click: async () => {
             // Only fixed, trusted URLs reach shell.openExternal from the menu.
             await shell.openExternal('https://buildtogether.app');

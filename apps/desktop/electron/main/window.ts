@@ -1,8 +1,11 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { IPC } from '@buildtogether/shared';
 import { isDev } from './config';
 import { registerWindowGuards } from './security';
 import { RENDERER_URL } from './protocol';
+import { restoreWindowState, type WorkArea, type WindowState } from './window-state';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -10,16 +13,74 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
+function getWorkAreas(): WorkArea[] {
+  return screen.getAllDisplays().map(({ workArea }) => ({
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width,
+    height: workArea.height,
+  }));
+}
+
+function getPrimaryWorkArea(): WorkArea {
+  const { workArea } = screen.getPrimaryDisplay();
+  return { x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height };
+}
+
+function readSavedState(): WindowState {
+  try {
+    const stored = JSON.parse(
+      readFileSync(join(app.getPath('userData'), 'window-state.json'), 'utf8'),
+    );
+    return restoreWindowState(stored, getWorkAreas(), getPrimaryWorkArea());
+  } catch {
+    return restoreWindowState(null, getWorkAreas(), getPrimaryWorkArea());
+  }
+}
+
+function notifyWindowState(win: BrowserWindow): void {
+  if (!win.webContents.isDestroyed()) {
+    win.webContents.send(IPC.WINDOW_STATE_CHANGED, {
+      isMaximized: win.isMaximized(),
+      isFullScreen: win.isFullScreen(),
+    });
+  }
+}
+
+function persistWindowState(win: BrowserWindow): void {
+  try {
+    const normal = win.getNormalBounds();
+    const state = restoreWindowState(
+      {
+        ...normal,
+        isMaximized: win.isMaximized(),
+      },
+      getWorkAreas(),
+      getPrimaryWorkArea(),
+    );
+    writeFileSync(join(app.getPath('userData'), 'window-state.json'), JSON.stringify(state));
+  } catch (error) {
+    console.error('[desktop] unable to persist window state', error);
+  }
+}
+
 export function createWindow(): BrowserWindow {
+  const savedState = readSavedState();
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    x: savedState.x,
+    y: savedState.y,
+    width: savedState.width,
+    height: savedState.height,
     minWidth: 940,
     minHeight: 600,
     show: false,
-    backgroundColor: '#0b0d10',
-    title: 'BuildTogether',
-    autoHideMenuBar: false,
+    backgroundColor: '#0a0a0a',
+    title: 'Cue',
+    frame: process.platform !== 'win32',
+    resizable: true,
+    maximizable: true,
+    fullscreenable: true,
+    autoHideMenuBar: process.platform === 'win32',
     webPreferences: {
       // Security posture (Electron checklist #2, #3, #4, #6): no Node in the renderer,
       // strong isolation, and a sandboxed process.
@@ -34,7 +95,14 @@ export function createWindow(): BrowserWindow {
   });
   mainWindow = win;
 
+  if (savedState.isMaximized) win.maximize();
+
   win.on('ready-to-show', () => win.show());
+  win.on('maximize', () => notifyWindowState(win));
+  win.on('unmaximize', () => notifyWindowState(win));
+  win.on('enter-full-screen', () => notifyWindowState(win));
+  win.on('leave-full-screen', () => notifyWindowState(win));
+  win.on('close', () => persistWindowState(win));
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
   });

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu } from 'electron';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClerkBridge } from '@clerk/electron';
 import { storage } from '@clerk/electron/storage';
@@ -9,6 +10,14 @@ import { registerContentSecurityPolicy, registerPermissionGuards } from './secur
 import { buildApplicationMenu } from './menu';
 import { APP_HOST, APP_SCHEME, handleAppScheme } from './protocol';
 import { getProtocolClientRegistration } from './protocol-client';
+
+// Keep the existing user-data location across the BuildTogether → Cue Windows product rename.
+// Clerk's persisted desktop session and any future user data remain in the same directory.
+app.setName('Cue');
+const legacyUserDataPath = join(app.getPath('appData'), 'BuildTogether');
+mkdirSync(legacyUserDataPath, { recursive: true });
+app.setPath('userData', legacyUserDataPath);
+if (process.platform === 'win32') app.setAppUserModelId('com.cue.desktop');
 
 // A single-instance desktop app: refocus the existing window instead of opening a second one.
 const gotLock = app.requestSingleInstanceLock();
@@ -70,7 +79,8 @@ if (!gotLock) {
     // its own (no main-process session load here); production returns from waitForApiReady immediately.
     await waitForApiReady();
     registerIpc();
-    Menu.setApplicationMenu(buildApplicationMenu());
+    if (process.platform === 'win32') Menu.setApplicationMenu(null);
+    else Menu.setApplicationMenu(buildApplicationMenu());
     createWindow();
 
     // Automated smoke test (BT_SMOKE=1): verify the window loaded the renderer, the React root
