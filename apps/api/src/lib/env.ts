@@ -1,3 +1,5 @@
+import { validateClerkProductionConfiguration } from './clerk-env.js';
+
 /**
  * Environment configuration for the API. Loads and validates `process.env` once, at boot,
  * and fails fast on missing required values. Secrets live only here (server-side).
@@ -111,11 +113,7 @@ export function loadEnv(): Env {
   if (env.nodeEnv === 'production' && env.sessionSecret === 'dev-only-insecure-secret') {
     throw new Error('SESSION_SECRET must be set in production');
   }
-  // Clerk must be verifiable in production: at least one of the networkless JWT public key or the
-  // Secret Key (remote JWKS) is required, otherwise no session token could be trusted.
-  if (env.nodeEnv === 'production' && !env.clerkJwtKey && !env.clerkSecretKey) {
-    throw new Error('CLERK_JWT_KEY or CLERK_SECRET_KEY must be set in production');
-  }
+  validateClerkProductionConfiguration(env);
   return env;
 }
 

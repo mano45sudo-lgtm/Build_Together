@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { loadEnv } from 'vite';
+import { resolveClerkFrontendApiHost } from './electron/main/clerk-host';
 
 /**
  * electron-vite build model for BuildTogether desktop:
@@ -26,22 +28,34 @@ const bundleSharedAndClerk = externalizeDepsPlugin({
   exclude: ['@buildtogether/shared', '@clerk/electron'],
 });
 
-export default defineConfig({
-  main: {
-    plugins: [bundleShared],
-    build: { lib: { entry: resolve('electron/main/index.ts') } },
-  },
-  preload: {
-    plugins: [bundleSharedAndClerk],
-    build: { lib: { entry: resolve('electron/preload/index.ts') } },
-  },
-  renderer: {
-    root: 'src',
-    plugins: [react(), tailwindcss()],
-    build: {
-      rollupOptions: {
-        input: resolve('src/index.html'),
+export default defineConfig(({ mode }) => {
+  const fileEnv = loadEnv(mode, import.meta.dirname, '');
+  const clerkFrontendApiHost = resolveClerkFrontendApiHost({
+    host: process.env.VITE_CLERK_FRONTEND_API_HOST ?? fileEnv.VITE_CLERK_FRONTEND_API_HOST,
+    publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY ?? fileEnv.VITE_CLERK_PUBLISHABLE_KEY,
+    development: mode !== 'production',
+  });
+
+  return {
+    main: {
+      plugins: [bundleShared],
+      define: {
+        'process.env.CUE_CLERK_FRONTEND_API_HOST': JSON.stringify(clerkFrontendApiHost ?? ''),
+      },
+      build: { lib: { entry: resolve('electron/main/index.ts') } },
+    },
+    preload: {
+      plugins: [bundleSharedAndClerk],
+      build: { lib: { entry: resolve('electron/preload/index.ts') } },
+    },
+    renderer: {
+      root: 'src',
+      plugins: [react(), tailwindcss()],
+      build: {
+        rollupOptions: {
+          input: resolve('src/index.html'),
+        },
       },
     },
-  },
+  };
 });

@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { currentSession } from '../services/auth.service.js';
 import { resolveInternalIdentity } from '../services/identity.service.js';
 import { mintClerkToken } from './clerk-fixtures.js';
+import { assertTestDatabaseIdentity, parseIsolatedTestDatabaseUrl } from './database-safety.js';
 
 /**
  * Lightweight HTTP harness for real, end-to-end integration tests against the migrated PostgreSQL
@@ -97,6 +98,19 @@ export class TestApi {
 
 /** Wipe all Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 6 tables in FK-safe order (children before parents). */
 export async function resetDb(): Promise<void> {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('Database cleanup is allowed only when NODE_ENV=test');
+  }
+  const target = parseIsolatedTestDatabaseUrl(process.env.TEST_DATABASE_URL);
+  const connected = await prisma.$queryRaw<Array<{ database_name: string }>>`
+    SELECT current_database() AS database_name
+  `;
+  const actualName = connected[0]?.database_name;
+  if (!actualName) throw new Error('Could not establish the connected test database identity');
+  assertTestDatabaseIdentity(target.databaseName, actualName);
+  // Deliberately print only the database name, never the URL or credentials.
+  process.stdout.write(`[api tests] isolated database: ${actualName}\n`);
+
   await prisma.notification.deleteMany(); // recipient/actor/workspace refs -> clear before users & workspaces
   await prisma.intelligenceDismissal.deleteMany(); // user refs cascade, but clear explicitly for order
   await prisma.decisionHistory.deleteMany(); // actor is onDelete Restrict -> clear before users

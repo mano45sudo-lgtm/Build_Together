@@ -45,13 +45,34 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 /** How often we ferry a freshly-refreshed Clerk session token to main (ms). Well under the ~60s TTL. */
 const TOKEN_KEEPALIVE_MS = 45_000;
 const AUTH_HANDOFF_TIMEOUT_MS = 20_000;
+const API_RETRY_DELAYS_MS = [300, 700, 1_400] as const;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function loadSessionWithRetry(
+  bridge: ReturnType<typeof requireBridge>,
+): Promise<AuthSessionView | null> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await unwrap(bridge.auth.me());
+    } catch (error) {
+      const delay = API_RETRY_DELAYS_MS[attempt];
+      if (!(error instanceof BridgeError) || error.code !== 'NETWORK_ERROR' || delay === undefined) {
+        throw error;
+      }
+      await wait(delay);
+    }
+  }
+}
 
 function authFailureMessage(error: unknown): string {
   if (error instanceof BridgeError && error.code === 'AUTH_NOT_CONFIGURED') {
     return 'The API is missing its Clerk server key. Set CLERK_SECRET_KEY in apps/api/.env and restart the API.';
   }
   if (error instanceof BridgeError && error.code === 'NETWORK_ERROR') {
-    return 'The BuildTogether API could not be reached. Start the API and PostgreSQL, then try again.';
+    return 'Cue could not connect to its API. Confirm the API is running, then try again.';
   }
   return errorMessage(error);
 }
@@ -134,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await unwrap(bridge.auth.syncToken(token));
         if (cancelled || timedOut) return;
-        const view = await unwrap(bridge.auth.me());
+        const view = await loadSessionWithRetry(bridge);
         if (cancelled || timedOut) return;
         if (view) applySession(view);
         else clearSession('signed-out');

@@ -10,6 +10,7 @@
     "build": "pnpm --filter @buildtogether/shared build && tsc -p tsconfig.build.json",
     "typecheck": "pnpm --filter @buildtogether/shared build && tsc --noEmit",
     "test": "pnpm --filter @buildtogether/shared build && vitest run",
+    "test:unit": "pnpm --filter @buildtogether/shared build && vitest run --config vitest.unit.config.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

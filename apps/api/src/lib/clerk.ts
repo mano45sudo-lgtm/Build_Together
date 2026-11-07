@@ -1,6 +1,7 @@
 import { createClerkClient, verifyToken } from '@clerk/backend';
-import { unauthorized } from '../errors/app-error.js';
+import { serviceUnavailable, unauthorized } from '../errors/app-error.js';
 import { env } from './env.js';
+import { buildVerifiedClerkProfile } from './clerk-profile.js';
 
 /**
  * Clerk session verification + profile resolution (ADR-0006). Authentication is delegated to
@@ -30,7 +31,8 @@ export interface VerifiedClerkSession {
 /** The identity attributes Clerk holds for provisioning an internal user (never password-based). */
 export interface ClerkUserProfile {
   email: string;
-  name: string;
+  name?: string | undefined;
+  verifiedEmails?: string[] | undefined;
 }
 
 export type ClerkSessionVerifier = (token: string) => Promise<VerifiedClerkSession>;
@@ -50,7 +52,7 @@ function getClerkClient(): ReturnType<typeof createClerkClient> | null {
   return client;
 }
 
-async function realVerifier(token: string): Promise<VerifiedClerkSession> {
+export async function verifyClerkSessionToken(token: string): Promise<VerifiedClerkSession> {
   if (!env.clerkJwtKey && !env.clerkSecretKey) {
     // Unconfigured → cannot verify anyone. Fail closed as unauthenticated (never a bypass).
     throw unauthorized('AUTH_NOT_CONFIGURED', 'Authentication is not configured');
@@ -73,7 +75,7 @@ async function realVerifier(token: string): Promise<VerifiedClerkSession> {
   return { clerkUserId, sessionId: payload.sid ?? clerkUserId };
 }
 
-async function realProfileFetcher(clerkUserId: string): Promise<ClerkUserProfile> {
+export async function fetchClerkUserProfile(clerkUserId: string): Promise<ClerkUserProfile> {
   const clerk = getClerkClient();
   if (!clerk) {
     throw unauthorized('AUTH_NOT_CONFIGURED', 'Authentication is not configured');
@@ -82,26 +84,26 @@ async function realProfileFetcher(clerkUserId: string): Promise<ClerkUserProfile
   try {
     user = await clerk.users.getUser(clerkUserId);
   } catch {
-    throw unauthorized('UNKNOWN_IDENTITY', 'Clerk identity could not be resolved');
+    throw serviceUnavailable(
+      'CLERK_PROFILE_UNAVAILABLE',
+      'Clerk profile is temporarily unavailable',
+    );
   }
-  const email = user.primaryEmailAddressId
-    ? user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress
-    : user.emailAddresses[0]?.emailAddress;
-  if (!email) {
-    throw unauthorized('NO_VERIFIED_EMAIL', 'Clerk identity has no verified email address');
+  const profile = buildVerifiedClerkProfile(user);
+  if (!profile) {
+    throw unauthorized('NO_VERIFIED_EMAIL', 'A verified email address is required to use Cue');
   }
-  const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || email;
-  return { email, name };
+  return profile;
 }
 
 /** Resolve the verifier (real from env, or the injected test seam). */
 export function getClerkVerifier(): ClerkSessionVerifier {
-  return verifier ?? realVerifier;
+  return verifier ?? verifyClerkSessionToken;
 }
 
 /** Resolve the profile fetcher (real from env, or the injected test seam). */
 export function getClerkProfileFetcher(): ClerkProfileFetcher {
-  return profileFetcher ?? realProfileFetcher;
+  return profileFetcher ?? fetchClerkUserProfile;
 }
 
 /**

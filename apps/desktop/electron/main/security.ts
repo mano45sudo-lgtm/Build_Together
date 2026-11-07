@@ -1,6 +1,7 @@
 import { session, shell } from 'electron';
 import type { WebContents } from 'electron';
 import { isDev, trustedRendererOrigin } from './config';
+import { clerkCspSources } from './clerk-host';
 
 /**
  * Content Security Policy applied to every renderer document.
@@ -15,28 +16,31 @@ import { isDev, trustedRendererOrigin } from './config';
  *
  * Clerk (ADR-0006): the auth screens mount Clerk's own prebuilt `<SignIn/>`/`<SignUp/>` components
  * (`@clerk/electron/react`), themed to the Monochrome palette via `ClerkProvider`'s `appearance`. Those
- * components load Clerk's client/UI bundle from the Clerk Frontend API CDN and open a `wss://` session
- * channel, so `script-src` and `connect-src` must allow the Clerk hosts (`https://*.clerk.accounts.dev`
- * for test/dev instances, `https://*.clerk.com` for production/custom domains) or the provider never
+ * components load Clerk's client/UI bundle from the configured Clerk Frontend API host and open a
+ * `wss://` session channel, so script/image/font policy must allow that exact host or the provider never
  * finishes loading and the app hangs on the boot splash (`isLoaded` stays false). Clerk's email/password
  * UI renders in-page (shadow DOM), not in an iframe, so `frame-src 'none'` stays. (If the Dashboard later
  * enables OAuth/Captcha, those flows need `frame-src`/extra hosts — revisit then, not preemptively.)
  */
 export function buildCspHeaderValue(): string {
-  // Clerk loads its client/UI bundle from the Frontend API CDN and opens a `wss://` session channel
-  // back to it, so both `script-src` and `connect-src` must allow the Clerk hosts. Test/development
-  // instances live on `*.clerk.accounts.dev`; production / custom domains on `*.clerk.com`.
-  const clerkHosts = 'https://*.clerk.accounts.dev https://*.clerk.com';
-  const scriptSrcSelf = `script-src 'self' ${clerkHosts}`;
-  const connectSrcBase = "connect-src 'self' https: wss:";
+  const clerkHost = process.env.CUE_CLERK_FRONTEND_API_HOST;
+  const clerkSources = clerkHost ? clerkCspSources(clerkHost, isDev()) : undefined;
+  const clerkOrigin = clerkSources?.frontendApi;
+  const clerkSocket = clerkSources?.frontendSocket;
+  // Clerk's hosted avatars use img.clerk.com; script/font/FAPI access stays scoped to this exact
+  // instance hostname. Do not use a wildcard over every Clerk instance.
+  const clerkImageHost = clerkSources?.images;
+  const clerkScriptSources = clerkOrigin ? ` ${clerkOrigin}` : '';
+  const scriptSrcSelf = `script-src 'self'${clerkScriptSources}`;
+  const connectSrcBase = `connect-src 'self' https: wss:${clerkOrigin ? ` ${clerkOrigin} ${clerkSocket}` : ''}`;
   const directives = [
     "default-src 'self'",
     scriptSrcSelf,
     // Tailwind v4 / Motion apply inline styles; scripts remain restricted to 'self' + the Clerk CDN.
     "style-src 'self' 'unsafe-inline'",
     // Clerk's prebuilt UI serves icon/avatar images and embedded fonts from the same CDN hosts.
-    `img-src 'self' data: blob: ${clerkHosts}`,
-    `font-src 'self' data: ${clerkHosts}`,
+    `img-src 'self' data: blob:${clerkImageHost ? ` ${clerkImageHost}` : ''}${clerkScriptSources}`,
+    `font-src 'self' data:${clerkScriptSources}`,
     connectSrcBase,
     "object-src 'none'",
     "frame-src 'none'",
@@ -50,7 +54,7 @@ export function buildCspHeaderValue(): string {
     directives.splice(
       directives.indexOf(scriptSrcSelf),
       1,
-      `script-src 'self' 'unsafe-inline' ${clerkHosts}`,
+      `script-src 'self' 'unsafe-inline'${clerkScriptSources}`,
     );
     // 2) Permit HMR + the local dev API regardless of which port Vite actually landed on.
     //    `trustedRendererOrigin()` derives the origin from `ELECTRON_RENDERER_URL`, so an occupied

@@ -1,4 +1,4 @@
-# CUE Cloud Deployment Plan — Phase 0 Audit
+# CUE Cloud Deployment Plan — Phase 0/2 Audit
 
 **Status: NOT READY TO DEPLOY.** This is an inspection and planning document only. No Railway
 project/database was created, no production credentials were read or copied, and no deployment,
@@ -33,6 +33,45 @@ DNS change, or migration was performed.
 | Health/readiness               | NEEDS IMPLEMENTATION | `/api/v1/health` checks only that the process answers; there is no DB readiness endpoint.                                                                             |
 | Production operations/security | NEEDS IMPLEMENTATION | Graceful shutdown does not explicitly disconnect Prisma; error logging, security headers, rate-limit topology, backup/restore, and monitoring need production review. |
 
+## Phase 2 — Clerk authentication production audit
+
+**Status: AUDIT COMPLETE; AUTHENTICATION NOT PRODUCTION-VERIFIED.** This phase inspected the
+Electron-to-API auth path, Clerk token verification, email selection, first-login provisioning,
+workspace authorization, legacy auth remnants and required environment configuration. It made
+documentation changes only. No Clerk Dashboard, production database, credentials, Railway
+resources, or live auth provider were accessed.
+
+Key source findings and detailed test requirements are in
+[`AUTHENTICATION_DEPLOYMENT.md`](./AUTHENTICATION_DEPLOYMENT.md) and
+[`PRODUCTION_SECURITY_CHECKLIST.md`](./PRODUCTION_SECURITY_CHECKLIST.md). Release blockers
+include unverified email selection during first provisioning, optional issuer/authorized-party
+verification, the mismatch between JWT-key-only startup and Backend API provisioning, and
+unverified production Clerk dashboard/CSP/native OAuth settings. The `app://bundle/` callback
+is structurally consistent with Clerk's documented Electron scheme/host callback, but the
+packaged production Windows flow has not been tested. Clerk's production instance domain is
+separate from that app callback.
+
+No critical authentication bypass was confirmed in the reviewed source; that is not a
+penetration-test result. Membership and role checks are database-backed in source, but
+production behavior and complete integration coverage remain unverified.
+
+## Phase 2.1 — Clerk authentication hardening
+
+**Status: CODE HARDENING COMPLETE; LIVE PRODUCTION AUTH NOT VERIFIED.** The API now rejects
+unverified-email provisioning, refreshes verified identity profiles safely, forces a fresh
+verified profile before invitation lookup/acceptance, requires production Clerk provisioning
+secret/issuer/authorized-party configuration, and uses a validated exact Frontend API hostname
+for Clerk-related Electron CSP sources. A loopback-only `TEST_DATABASE_URL` guard verifies the
+connected database name before test cleanup. Details and required manual settings are in
+[`AUTHENTICATION_DEPLOYMENT.md`](./AUTHENTICATION_DEPLOYMENT.md).
+
+API unit tests (5 files / 31 tests), desktop tests (9 files / 50 tests), shared/API/desktop
+typechecks, API production TypeScript build, Electron development-mode build, and workspace lint passed. Integration tests were
+not run because no isolated test database was configured or confirmed; no database was
+connected to or reset. The production desktop build needs the actual
+`VITE_CLERK_FRONTEND_API_HOST` from the Clerk configuration owner. Dashboard, live token, email,
+Google OAuth, packaged Windows callback, and production API behavior remain unverified.
+
 ## Nexconn configuration and boundaries
 
 - The server-side `@nexconn/server-sdk` is isolated in `apps/api/src/modules/chat/nexconn.provider.ts`.
@@ -61,16 +100,21 @@ DNS change, or migration was performed.
    the PostgreSQL pool within the platform's termination window.
 3. Pin a supported Node LTS version, keep the workspace lockfile install reproducible, and verify
    the Railway build/install/start commands in a clean environment.
-4. Decide whether to remove or formally retire legacy self-managed auth schema/code; validate
-   verified-email provisioning and explicit legacy-account linking.
-5. Resolve the destructive temporary SQL script in `apps/api/prisma/` before any migration job.
-6. Create/configure Railway and a private PostgreSQL service only after user approval; configure
+4. Supply the actual production Clerk issuer, authorized parties, API Secret Key, desktop
+   publishable key, and Frontend API hostname through their intended secure configuration
+   channels; verify Dashboard settings and packaged Windows email/Google OAuth flows. No values
+   are guessed or stored by this audit.
+5. Inventory legacy accounts and decide whether to retire self-managed auth schema/code; define
+   explicit user-verified linking before any schema cleanup.
+6. Resolve the destructive temporary SQL script in `apps/api/prisma/` before any migration job.
+7. Create/configure Railway and a private PostgreSQL service only after user approval; configure
    secrets in Railway Variables, backups, healthcheck, and a reversible first migration plan.
-7. Deploy to Railway only in the separately authorized phase; record the generated HTTPS domain,
+8. Deploy to Railway only in the separately authorized phase; record the generated HTTPS domain,
    then provide it to the Windows client through supported configuration without baking a temporary
    URL into the client.
-8. Verify Clerk production origins and the real packaged Windows sign-in flow; configure Nexconn
-   keys/domains/webhook callback only if live chat is part of the initial release.
+9. Configure Nexconn keys/domains/webhook callback only if live chat is part of the initial release.
 
-Phase 1 import/runtime work is documented in `RAILWAY_CONFIGURATION.md`. The remaining items above
-are not part of that scoped fix and are not authorization to create or change infrastructure.
+Phase 1 import/runtime work is documented in `RAILWAY_CONFIGURATION.md`. Phase 2's audit is
+documented above; fixes, dashboard changes, and remaining deployment items are separate work
+requiring their own authorization. Nothing in this plan authorizes infrastructure creation or
+deployment.

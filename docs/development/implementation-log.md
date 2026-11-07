@@ -3,6 +3,39 @@
 Running record of completed phases. Newest first. Full detail for a phase lives in its
 completion report; this log is the durable summary.
 
+## Cloud deployment readiness — Phase 1.1: API test failure triage
+
+**Date:** 2026-11-07 · **Status:** INCOMPLETE; test failures are explained by unavailable local
+infrastructure, and PostgreSQL-backed verification remains outstanding. No application source,
+authentication, Nexconn, Prisma schema/migrations, or deployment configuration was changed.
+
+- Inventory: 11 API test files. `intelligence-engine.test.ts` is pure unit coverage. `security.test.ts`
+  and `webhook.test.ts` mix pure helper cases with local HTTP and database integration tests.
+  `app.test.ts` starts a local HTTP server. The auth, chat, decisions, intelligence, projects, tasks,
+  workspaces, and database portions of security/webhook suites use `TestApi`, Prisma, and shared
+  `resetDb()` cleanup. Clerk is replaced with fake verifier/profile seams; chat uses a fake provider;
+  no test requires live Clerk, Nexconn, SMTP, or another external service.
+- Full API run result: **171 total: 16 passed, 155 failed**. Failure classification: **151
+  environment failures** from PostgreSQL connection `EACCES` at `127.0.0.1:5432` (auth 8, chat 19,
+  decisions 35, intelligence 6, projects 21, tasks 29, workspaces 23, webhook 7, security 3); **4
+  environment failures** from loopback HTTP fetch `EACCES` on ephemeral ports (app 2, security rate
+  limiter 1, webhook rate limiter 1); **0 observed application failures; 0 unknown**. These are
+  classified from the concrete connect errors, not only from test setup status.
+- Independently reran the pure cases: intelligence engine **13 passed**, Argon2 helper **1 passed**,
+  webhook identity helpers **2 passed**. Total independently verified pure tests: **16 passed**.
+- Local test DB readiness: no listener was found on port 5432; Docker commands could not access the
+  Docker Desktop engine (`permission denied`), and no repository Compose file was found. The repo
+  documents a local `bt-postgres` PostgreSQL 16 container on `127.0.0.1:5432`. No database was
+  started or contacted, and no migration/cleanup command was run.
+- **Test safety finding:** `apps/api/src/test/setup.ts` defaults `DATABASE_URL` to database
+  `buildtogether`, the same database name documented for local development. `resetDb()` deletes all
+  product rows in FK order before tests. Therefore do not run the integration suite until
+  `DATABASE_URL` is explicitly confirmed to identify an isolated test-only database; the current
+  environment also needs a running PostgreSQL service and permission for loopback test-server
+  connections.
+- No application defect was demonstrated; the integration assertions remain unverified. No commits,
+  pushes, cloud resources, production DB access, or migrations were performed.
+
 ## Cloud deployment readiness — Phase 1: API runtime imports
 
 **Date:** 2026-11-07 · **Status:** INCOMPLETE for deployment readiness; the authorized shared
@@ -1069,3 +1102,103 @@ documented, but the API production runtime import is a code blocker; DB, Clerk, 
 account settings need user configuration; and the legacy auth/data and destructive loose SQL file
 need explicit resolution. Wait for approval before Phase 1. No deployment or unauthorized future
 phase work was performed.
+
+## Clerk authentication production audit — Phase 2
+
+### Scope and handling
+
+Traced the current Electron Clerk UI/provider, native callback and storage bridge, main-process
+token handling, API verifier and middleware, identity provisioning, workspace authorization,
+legacy authentication remnants, and environment configuration. Updated the authentication
+deployment guide, production security checklist, and cloud deployment plan. This phase was
+documentation-only: no application source, Clerk Dashboard, credentials, database, migration,
+Nexconn, Railway resource, or deployment was changed. Secret values were not read or printed.
+
+### Findings
+
+- Electron uses Clerk's prebuilt SignIn/SignUp UI. Clerk session state is restored through the
+  Electron bridge; a short-lived JWT travels over sender-validated typed IPC and is held in
+  main-process memory for API Bearer requests. The API verifies the Clerk token and maps verified
+  `sub` to the internal identity; workspace membership and roles are loaded from the database.
+- First API use provisions a Cue user by unique Clerk ID. Provisioning is retryable and handles a
+  same-Clerk-ID create race; distinct Clerk IDs with the same email are rejected, not merged.
+  Workspace creation/membership does not happen as a side effect of identity provisioning.
+- The API profile fetcher chooses the primary or first Clerk email without checking its
+  verification state, despite a `NO_VERIFIED_EMAIL` error label. Existing user profiles are not
+  refreshed after email/name changes. Production verification also permits omitting issuer and
+  authorized-party constraints. A JWT-key-only production setup can verify existing users but
+  cannot fetch profiles for first-time provisioning, which requires `CLERK_SECRET_KEY`.
+- Legacy password/session repositories, helpers, validation schemas, Prisma fields and TTL
+  settings remain but are not connected to current login routes. `SESSION_SECRET` remains a
+  production boot requirement even though current Clerk flow does not consume it. No legacy code
+  or schema was removed.
+- The `app://bundle/` callback is structurally compatible with Clerk's documented scheme/host
+  deep-link shape. Actual Dashboard allowlists, production domain/provider credentials, email
+  policy, live token claims, production CSP, email delivery, OAuth, and packaged Windows callback
+  were not verified.
+
+### Validation and status
+
+- Static source/configuration tracing only; no tests or live provider/API flows were run in this
+  audit phase. Detailed required tests are listed in `docs/deployment/AUTHENTICATION_DEPLOYMENT.md`.
+- No critical auth bypass was confirmed in reviewed source; this is not penetration-test evidence.
+- Production authentication remains unverified and has release blockers. No production database,
+  Clerk Dashboard, cloud resources, credentials or migrations were touched. No source changes,
+  commits or pushes were made. Stop here and wait for approval before implementing fixes.
+
+## Clerk authentication hardening — Phase 2.1
+
+### Scope and changes
+
+Implemented the authorized Clerk hardening phase without changing identity provider, auth UI,
+legacy schema, Nexconn, database migrations, Railway or product behavior. Secret values were not
+read or printed. No production database was accessed; no database was created or reset.
+
+- Replaced the integration test setup's implicit development `DATABASE_URL` fallback with
+  required `TEST_DATABASE_URL`. The guard accepts only loopback PostgreSQL and a test-marked DB
+  name; `resetDb()` additionally requires `NODE_ENV=test` and verifies `current_database()` equals
+  the configured name before cleanup. It prints only that database name. Added no-connection unit
+  tests for missing, malformed, non-local, development/production-like and mismatched targets.
+- Clerk profile selection now prefers a verified primary email, otherwise the first verified
+  address in Clerk's returned order; no verified address fails provisioning safely. Email is
+  normalized, Clerk `sub` remains the identity key, and no email-based merging was added.
+- Existing profiles refresh from Clerk through a five-minute process-local cache. Only verified
+  email and non-empty supplied names update Cue data. Email uniqueness conflicts return explicit
+  `IDENTITY_EMAIL_CLASH`; refreshes for one identity serialize within a process. Pending-invite
+  reads and acceptance force a fresh profile so old addresses cannot claim invitations after an
+  upstream email change. Provider lookup failure fails closed for those invitation operations.
+- Production API startup now requires `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER`, and
+  `CLERK_AUTHORIZED_PARTIES`; audience stays optional unless the real Clerk token configuration
+  requires it. Safe errors disclose variable names only. Actual values remain the Clerk owner's
+  responsibility.
+- Electron production configuration validates explicit host-only
+  `VITE_CLERK_FRONTEND_API_HOST` and uses exact host sources in Clerk-related CSP. Production
+  builds require it. Development can derive the exact host from the public publishable key; a
+  Clerk-less development shell remains usable. No wildcard Clerk host or unsafe script policy was
+  added. Existing broad HTTPS/WSS connect sources for app integrations remain unchanged.
+- Legacy password hashes, session models, repositories, password helpers and session fields were
+  left untouched.
+
+### Validation results
+
+- `pnpm --filter @buildtogether/api test:unit` — passed: 5 files / 31 tests.
+- `pnpm --filter @buildtogether/desktop test` — passed: 9 files / 50 tests.
+- `pnpm --filter @buildtogether/shared typecheck` — passed.
+- `pnpm --filter @buildtogether/api typecheck` — passed.
+- `pnpm --filter @buildtogether/desktop typecheck` — passed.
+- `pnpm --filter @buildtogether/api build` — passed (production TypeScript build).
+- `pnpm --filter @buildtogether/desktop exec electron-vite build --mode development` — passed;
+  existing RongCloud browser-externalization warning remains.
+- `pnpm lint` — passed.
+- API integration tests were not run: `TEST_DATABASE_URL` was unset and no isolated test database
+  identity was confirmed. No existing database was reset. Desktop production build/runtime was
+  not run because the production Frontend API host was not supplied. Live Clerk verification,
+  email delivery, Google OAuth, Dashboard settings and packaged Windows callback remain untested.
+
+### Status
+
+Phase 2.1 code hardening is implemented and its database-free checks pass. Production auth is not
+verified until the authorized Clerk owner supplies real production values and Dashboard settings,
+and the isolated integration database and packaged Windows verification can be run. No production
+settings, credentials, databases, migrations, Railway resources, deployment, commits or pushes
+were touched. Stop here and wait for approval.

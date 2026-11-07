@@ -44,6 +44,20 @@ export async function findByClerkUserId(clerkUserId: string): Promise<UserRecord
   return prisma.user.findUnique({ where: { clerkUserId }, select: publicUserSelect });
 }
 
+export async function findIdentityById(
+  id: string,
+): Promise<{ id: string; clerkUserId: string | null } | null> {
+  return prisma.user.findUnique({ where: { id }, select: { id: true, clerkUserId: true } });
+}
+
+/** Update only provider fields that were actually supplied; Prisma's unique email index remains authoritative. */
+export async function updateClerkProfile(
+  id: string,
+  data: { email: string; name?: string },
+): Promise<UserRecord> {
+  return prisma.user.update({ where: { id }, data, select: publicUserSelect });
+}
+
 /** Login only: includes the Argon2id hash. Callers must never return this to a client. */
 export async function findByEmailWithSecret(
   email: string,

@@ -1,15 +1,18 @@
 /**
  * Vitest global setup. Runs before every test file (see vitest.config.ts `setupFiles`).
  *
- * `lib/env.ts` loads and validates configuration eagerly at import time (DATABASE_URL is
- * required because auth/workspaces are backed by PostgreSQL). These are non-secret dev/test
- * defaults pointing at the local Docker PostgreSQL (docs/environment-setup.md); a real
- * integration test migrates and exercises this schema. Override via the environment when the
- * test database differs.
+ * Integration tests are destructive: resetDb() deletes all application rows. Require an
+ * explicit local TEST_DATABASE_URL with an unmistakable test database name; never inherit the
+ * app's development DATABASE_URL as a fallback.
  */
-process.env.NODE_ENV ??= 'test';
-process.env.DATABASE_URL ??=
-  'postgresql://buildtogether:buildtogether@127.0.0.1:5432/buildtogether';
+import { parseIsolatedTestDatabaseUrl } from './database-safety.js';
+
+if (process.env.NODE_ENV && process.env.NODE_ENV !== 'test') {
+  throw new Error('NODE_ENV must be test before starting API integration tests');
+}
+process.env.NODE_ENV = 'test';
+const testDatabase = parseIsolatedTestDatabaseUrl(process.env.TEST_DATABASE_URL);
+process.env.DATABASE_URL = testDatabase.url.toString();
 process.env.SESSION_SECRET ??= 'test-only-insecure-secret';
 // Raise the brute-force ceilings so integration suites run many auth attempts without 429s;
 // the throttle behaviour is covered by a dedicated security test with its own low limit.

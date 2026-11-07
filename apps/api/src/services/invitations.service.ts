@@ -14,6 +14,7 @@ import * as userRepo from '../repositories/user.repo.js';
 import * as workspaceRepo from '../repositories/workspace.repo.js';
 import { buildAcceptUrl, getEmailProvider } from './email.provider.js';
 import { normalizeEmail } from '../validation/schemas.js';
+import { refreshInternalIdentityProfile } from './identity.service.js';
 
 /**
  * Invitation lifecycle: create → (email or dev link) → accept. Tokens are high-entropy random
@@ -82,8 +83,7 @@ export async function listInvitations(workspaceId: string): Promise<InvitationSu
 
 /** Pending invitations addressed to the caller's email (their personal invite inbox). */
 export async function pendingForUser(userId: string): Promise<InvitationSummary[]> {
-  const user = await userRepo.findUserById(userId);
-  if (!user) throw notFound('USER_NOT_FOUND', 'User not found');
+  const user = await refreshInternalIdentityProfile(userId);
   const rows = await invitationRepo.listPendingForEmail(user.email);
   return rows.map(toInvitationSummary);
 }
@@ -116,8 +116,9 @@ export async function acceptInvitation(token: string, userId: string): Promise<W
     throw forbidden('INVITATION_EXPIRED', 'This invitation has expired');
   }
 
-  const user = await userRepo.findUserById(userId);
-  if (!user) throw notFound('USER_NOT_FOUND', 'User not found');
+  // A primary email may have changed upstream since the last session refresh. Read Clerk now and
+  // update only from a verified address before comparing the invitation's normalized email.
+  const user = await refreshInternalIdentityProfile(userId);
   // The acceptor's own email must match the invited address (no token interception by a third party).
   if (user.email !== normalizeEmail(inv.email)) {
     throw forbidden('EMAIL_MISMATCH', 'This invitation was issued to a different email');
