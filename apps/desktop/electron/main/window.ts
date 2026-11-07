@@ -126,7 +126,6 @@ export function createWindow(): BrowserWindow {
       throw new Error('ELECTRON_RENDERER_URL is not set — launch via `electron-vite dev`.');
     }
     void win.loadURL(devUrl);
-    win.webContents.openDevTools({ mode: 'detach' });
   } else {
     void win.loadURL(RENDERER_URL);
   }

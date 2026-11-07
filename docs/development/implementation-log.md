@@ -927,3 +927,40 @@ and native runtime behavior could not be verified because network access to GitH
 and the runtime smoke launch failed. Re-run packaging where NSIS is available, then install,
 launch, verify OAuth/deep-link return, and uninstall on Windows. Final Cue artwork and code signing
 remain deployment inputs. No unauthorized future-phase features were implemented.
+
+## Stop automatic Developer Tools on Cue launch
+
+### Root cause and fix
+
+`apps/desktop/electron/main/window.ts` called `win.webContents.openDevTools({ mode: 'detach' })`
+inside `createWindow()` for every development window. That explicitly opened a separate detached
+Developer Tools window on each normal dev launch and every recreated window. Removed only that
+call. Development DevTools remain available through the existing native View → Toggle Developer
+Tools menu (`electron/main/menu.ts`); packaged Windows still has `devTools: false` in its
+BrowserWindow web preferences. No renderer IPC or security setting changed.
+
+### Validation
+
+- Full source search found no other automatic DevTools opener. The only remaining DevTools access
+  is the intentional native menu role for development; the Windows custom shell has no menu, and
+  production DevTools remain disabled at the BrowserWindow boundary.
+- `pnpm --filter @buildtogether/desktop typecheck` — passed.
+- `pnpm --filter @buildtogether/desktop test` — passed: 8 files / 46 tests.
+- `pnpm desktop:build` — passed; existing RongCloud `path` browser externalization warning remains.
+- `pnpm format:check` and `pnpm lint` — passed.
+- Runtime launch/reload/reopen and packaged production launch could not be verified: `pnpm
+desktop:dev` reaches “starting electron app” then exits with code `2147483651`; launching the
+  Electron executable directly exits without opening a window. The previously recorded packaged
+  smoke result predates this fix and is not counted as post-fix evidence. Installer production
+  launch was also unavailable because NSIS could not be downloaded (`github.com` DNS unavailable).
+
+### Acceptance status
+
+- **Met:** The automatic detached DevTools call is removed; source inspection confirms no other
+  automatic DevTools opener exists.
+- **Met by code/config inspection:** DevTools remain manually reachable from the native development
+  View menu; packaged mode sets `devTools: false`.
+- **Not runtime-verified:** Dev launch/reload/reopen and production packaged launch. Electron exits
+  before creating a window in this environment, and no installer was produced.
+- No auth, UI design, backend, API configuration, or security settings were changed. No new
+  dependencies or future-phase features were added.
