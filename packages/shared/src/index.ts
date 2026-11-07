@@ -49,22 +49,22 @@ export interface HealthReport {
 }
 
 // ---- Desktop (Electron) contracts ----
-export * from './desktop';
+export * from './desktop.js';
 
 // ---- Phase 2 domain contracts (identity, workspaces, membership, invitations) ----
-export * from './domain';
+export * from './domain.js';
 
 // ---- Phase 3 communication contracts (workspace-scoped chat over Nexconn) ----
-export * from './chat';
+export * from './chat.js';
 
 // ---- Phase 4 project contracts (workspace-scoped projects) ----
-export * from './projects';
+export * from './projects.js';
 
 // ---- Phase 5 task contracts (project-scoped tasks, ownership, dependencies, activity) ----
-export * from './tasks';
+export * from './tasks.js';
 
 // ---- Phase 6 Decision Vault contracts (decisions, alternatives, references, comments, history) ----
-export * from './decisions';
+export * from './decisions.js';
 
 // ---- Phase 7 Execution Intelligence contracts (health, blockers, risks, recommendations, impacts) ----
-export * from './intelligence';
+export * from './intelligence.js';

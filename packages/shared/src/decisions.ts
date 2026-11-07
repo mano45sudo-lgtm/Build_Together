@@ -11,7 +11,7 @@
  * workspace boundary from the DB, and every link is validated to live inside the SAME workspace.
  */
 
-import type { ApiResponse } from './index';
+import type { ApiResponse } from './index.js';
 
 // ---- Enums (mirror the Prisma enums; string unions for the wire) ----
 

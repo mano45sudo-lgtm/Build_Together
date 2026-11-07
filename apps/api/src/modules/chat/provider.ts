@@ -1,6 +1,6 @@
 import { env } from '../../lib/env.js';
-import { NexconnChatProvider } from './nexconn.provider';
-import type { ChatProvider } from './provider.types';
+import { NexconnChatProvider } from './nexconn.provider.js';
+import type { ChatProvider } from './provider.types.js';
 
 /**
  * Resolve the chat provider singleton from server-side env (backend-engineering: config is read

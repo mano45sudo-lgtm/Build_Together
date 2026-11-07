@@ -5,10 +5,15 @@
   "type": "module",
   "description": "Shared TypeScript contracts (API envelope, domain DTOs, desktop IPC) for the BuildTogether desktop client and API.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "echo \"@buildtogether/shared: no tests (types only)\" && exit 0"
   },

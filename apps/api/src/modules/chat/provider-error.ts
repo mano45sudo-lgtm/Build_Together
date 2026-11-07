@@ -1,6 +1,6 @@
 import type { AppError } from '../../errors/app-error.js';
 import { badRequest, serviceUnavailable, tooManyRequests } from '../../errors/app-error.js';
-import { ProviderError } from './provider.types';
+import { ProviderError } from './provider.types.js';
 
 /**
  * Map a provider failure to a safe HTTP `AppError` (single place). The provider's own status/body is

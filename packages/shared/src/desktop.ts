@@ -24,15 +24,15 @@ import type {
   UpdateWorkspaceInput,
   WorkspaceRole,
   WorkspaceSummary,
-} from './domain';
-import type { ChatToken, ConversationSummary, CreateConversationInput } from './chat';
+} from './domain.js';
+import type { ChatToken, ConversationSummary, CreateConversationInput } from './chat.js';
 import type {
   CreateProjectInput,
   ProjectListQuery,
   ProjectOverview,
   ProjectView,
   UpdateProjectInput,
-} from './projects';
+} from './projects.js';
 import type {
   AddTaskDependencyInput,
   AssignTaskInput,
@@ -44,7 +44,7 @@ import type {
   TaskListQuery,
   TaskView,
   UpdateTaskInput,
-} from './tasks';
+} from './tasks.js';
 import type {
   CreateDecisionCommentInput,
   CreateDecisionInput,
@@ -56,7 +56,7 @@ import type {
   DecisionView,
   SupersedeDecisionInput,
   UpdateDecisionInput,
-} from './decisions';
+} from './decisions.js';
 
 /** Non-secret runtime configuration the main process resolves and hands to the renderer. */
 export interface DesktopConfig {

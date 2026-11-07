@@ -1,5 +1,5 @@
-import type { ChatProvider, IssuedToken, ProviderFailure } from '../modules/chat/provider.types';
-import { ProviderError } from '../modules/chat/provider.types';
+import type { ChatProvider, IssuedToken, ProviderFailure } from '../modules/chat/provider.types.js';
+import { ProviderError } from '../modules/chat/provider.types.js';
 
 /**
  * A scripted in-memory `ChatProvider` for integration tests. It proves BuildTogether's OWN logic —

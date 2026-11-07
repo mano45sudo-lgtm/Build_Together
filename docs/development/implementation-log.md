@@ -3,6 +3,30 @@
 Running record of completed phases. Newest first. Full detail for a phase lives in its
 completion report; this log is the durable summary.
 
+## Cloud deployment readiness — Phase 1: API runtime imports
+
+**Date:** 2026-11-07 · **Status:** INCOMPLETE for deployment readiness; the authorized shared
+runtime-import fix is implemented and locally verified. Scope was limited to the API/shared ESM
+runtime boundary and related documentation. No Railway resources, production databases, or
+migrations were touched.
+
+- Root cause: `@buildtogether/shared` exported its TypeScript source directly and had no runtime
+  build. The API uses `ROLE_RANK` at runtime; Node then failed on extensionless ESM re-exports in
+  the shared barrel. Inspection also found extensionless API chat-provider runtime imports.
+- Added `packages/shared` ESM JavaScript + declaration output, explicit `.js` relative specifiers,
+  and `types`/`import`/`default` exports to built files. The API build runs shared first and compiles
+  with `NodeNext` so plain-Node-incompatible relative imports fail during compilation.
+- Preserved the Railway command:
+  `pnpm --filter @buildtogether/api prisma:generate && pnpm --filter @buildtogether/api build`;
+  start remains `pnpm --filter @buildtogether/api start`.
+- Verification: shared build, Prisma client generation, API build, runtime resolution from API to
+  `packages/shared/dist/index.js`, compiled API startup to the listen callback with a local example
+  DB URL, API/shared/desktop typechecks all passed. API test command ran but failed 155/171 tests
+  because PostgreSQL at `localhost:5432` was unavailable and loopback test-server connections were
+  denied with `EACCES`; 16 tests passed. No database request was made by the startup smoke check.
+- Railway/Railpack clean-build and production startup were not run. Other deployment blockers from
+  Phase 0 remain. No Phase 2 work was started.
+
 ## Clerk authentication repair _(scoped bug fix; no phase transition)_
 
 **Date:** 2026-11-06 · **Status:** Clerk UI restored; allowed origins fixed on the configured development instance; live email delivery and Google OAuth still require runtime verification.
@@ -985,3 +1009,63 @@ exception code in this environment, so runtime launch and shortcut verification 
 The NSIS configuration is set to create Cue Start Menu and Desktop shortcuts on successful
 installation. This environment-specific Windows loader issue is separate from the successful
 installer build; do not claim the app has been installed here.
+
+## Cloud deployment readiness audit — Phase 0
+
+### Scope
+
+Inspected the current monorepo, Express API, Clerk integration, Prisma schema/migrations, Nexconn
+adapter/client flow, Electron production API configuration, and deployment/security files. Created
+the six requested deployment documents. This was inspection/documentation only: no code, dependency,
+auth, Nexconn, API URL, database, Railway project, environment secret, migration, or deployment was
+changed. Secret values were not read or printed.
+
+### Key findings
+
+- Workspace is pnpm `11.8.0`, lockfile v9; Node was `v24.13.1` locally while the repo declares only
+  `>=20`. There is no CI workflow, Dockerfile, Railway config, or deployment script.
+- API source compiles to `apps/api/dist`, but direct Node startup fails: built API imports runtime
+  constants from source-only `@buildtogether/shared`, and Node reports `ERR_MODULE_NOT_FOUND` for
+  its extensionless `packages/shared/src/desktop` import. API is not Railway-ready until Phase 1
+  fixes the shared package production runtime output.
+- Current API has dynamic `PORT`, `/api/v1/health` (process-only, not database readiness), one exact
+  CORS origin, in-memory rate limits, and HTTP graceful close without explicit Prisma disconnect.
+- Clerk is authoritative. Legacy self-managed `Session` schema/repository, nullable `passwordHash`,
+  password helpers, token TTL settings, and `SESSION_SECRET` guard remain. No automatic legacy
+  account linking exists. First-time provisioning calls Clerk Backend API, but source does not
+  verify selected email's verification status.
+- There are 8 ordered Prisma migrations. A separate `tmp_rebaseline_decision_vault.sql` outside
+  migrations drops Decision Vault tables/types and edits `_prisma_migrations`; do not use it against
+  production. No production DB state was inspected and no migration command was run.
+- Nexconn chat requires all four current adapter settings (App Key, App Secret, primary/secondary
+  domains); messages flow client-to-provider and Cue stores metadata. No live Nexconn configuration
+  was verified. The handler does not pass App-Key for validation although its service comment
+  mentions it; verify the provider contract.
+- Packaged Electron API calls read runtime `BT_API_BASE_URL`, otherwise use the old
+  `https://api.buildtogether.app`; the installer excludes `.env`, and there is no supported installed
+  app configuration source for a Railway URL.
+
+### Validation
+
+- API TypeScript build emitted `apps/api/dist`; direct `node apps/api/dist/index.js` failed with
+  `ERR_MODULE_NOT_FOUND` at the source-only shared package import. No database connection was made.
+- Static checks of workspace manifests, route mounts/middleware, migration files, env names, Git
+  tracked paths, and deployment/CI file presence were performed.
+- Tests, live auth/Nexconn calls, Prisma migration status, migration execution, backup/restore,
+  Railway provisioning, and deployment were not run (out of Phase 0 scope or no target credentials).
+- Deployment documentation formatting check — passed (`prettier --check`). `git diff --check` — passed.
+
+### Deliverables and status
+
+- `docs/deployment/CLOUD_DEPLOYMENT_PLAN.md`
+- `docs/deployment/PRODUCTION_ENVIRONMENT.md`
+- `docs/deployment/DATABASE_MIGRATION_PLAN.md`
+- `docs/deployment/PRODUCTION_SECURITY_CHECKLIST.md`
+- `docs/deployment/RAILWAY_CONFIGURATION.md`
+- `docs/deployment/AUTHENTICATION_DEPLOYMENT.md`
+
+**INCOMPLETE for production readiness.** The Railway command design and environment inventory are
+documented, but the API production runtime import is a code blocker; DB, Clerk, Nexconn, and Railway
+account settings need user configuration; and the legacy auth/data and destructive loose SQL file
+need explicit resolution. Wait for approval before Phase 1. No deployment or unauthorized future
+phase work was performed.

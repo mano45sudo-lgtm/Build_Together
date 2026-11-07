@@ -12,8 +12,8 @@ import type {
   GroupChannelJoinRequest,
   GroupChannelQuitRequest,
 } from '@nexconn/server-sdk';
-import { ProviderError } from './provider.types';
-import type { ChatProvider, IssuedToken } from './provider.types';
+import { ProviderError } from './provider.types.js';
+import type { ChatProvider, IssuedToken } from './provider.types.js';
 
 /**
  * Nexconn adapter over `@nexconn/server-sdk` (ADR-0004). This is the ONLY file that imports the

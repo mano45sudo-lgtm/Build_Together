@@ -5,11 +5,11 @@
   "type": "module",
   "description": "BuildTogether API (Node.js + Express + TypeScript + Prisma).",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "pnpm --filter @buildtogether/shared build && tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "build": "pnpm --filter @buildtogether/shared build && tsc -p tsconfig.build.json",
+    "typecheck": "pnpm --filter @buildtogether/shared build && tsc --noEmit",
+    "test": "pnpm --filter @buildtogether/shared build && vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
