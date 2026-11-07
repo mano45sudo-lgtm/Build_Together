@@ -964,3 +964,24 @@ desktop:dev` reaches “starting electron app” then exits with code `214748365
   before creating a window in this environment, and no installer was produced.
 - No auth, UI design, backend, API configuration, or security settings were changed. No new
   dependencies or future-phase features were added.
+
+## Windows x64 installer packaging completed
+
+### Result
+
+Re-ran `pnpm desktop:package` with network access after the sandbox had repeatedly failed to
+resolve GitHub. electron-builder downloaded its Electron and NSIS packaging tools and completed
+successfully (`exit 0`). The generated x64 NSIS installer is
+`apps/desktop/release/Cue Setup.exe` (134,021,527 bytes); the unpacked application executable is
+`apps/desktop/release/win-unpacked/Cue.exe` (249,788,928 bytes). Windows file metadata identifies
+both as Cue version 0.1.0. No code-signing certificate is configured, so both are unsigned.
+
+### Install attempt
+
+Confirmed there was no existing Cue installation or Cue shortcut, then attempted a per-user silent
+install. Windows rejected the NSIS installer before it could run with `Illegal System DLL
+Relocation`; no installation or shortcuts were created. The unpacked app also exits with a Windows
+exception code in this environment, so runtime launch and shortcut verification remain incomplete.
+The NSIS configuration is set to create Cue Start Menu and Desktop shortcuts on successful
+installation. This environment-specific Windows loader issue is separate from the successful
+installer build; do not claim the app has been installed here.
