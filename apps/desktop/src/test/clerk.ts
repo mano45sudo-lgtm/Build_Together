@@ -38,3 +38,56 @@ export function setClerkIssuesToken(issues: boolean): void {
 export function setClerkLoaded(loaded: boolean): void {
   holder().state.isLoaded = loaded;
 }
+
+type MockFn = import('vitest').Mock<(...args: never[]) => Promise<unknown>>;
+
+/** Loosely typed handle on the Clerk resource stand-ins installed by setup.ts (reset per test). */
+export interface ClerkResourceMocks {
+  signIn: {
+    status: string;
+    supportedFirstFactors: { strategy: string }[];
+    supportedSecondFactors: { strategy: string }[];
+    create: MockFn;
+    password: MockFn;
+    finalize: MockFn;
+    reset: MockFn;
+    emailCode: { sendCode: MockFn; verifyCode: MockFn };
+    resetPasswordEmailCode: { sendCode: MockFn; verifyCode: MockFn; submitPassword: MockFn };
+    mfa: Record<
+      'sendEmailCode' | 'verifyEmailCode' | 'sendPhoneCode' | 'verifyPhoneCode' | 'verifyTOTP',
+      MockFn
+    >;
+  };
+  signUp: {
+    status: string;
+    missingFields: string[];
+    unverifiedFields: string[];
+    create: MockFn;
+    update: MockFn;
+    password: MockFn;
+    finalize: MockFn;
+    reset: MockFn;
+    verifications: { sendEmailCode: MockFn; verifyEmailCode: MockFn };
+  };
+  clerk: {
+    loaded: boolean;
+    session: unknown;
+    signOut: import('vitest').Mock<() => Promise<void>>;
+    setActive: import('vitest').Mock<(params: unknown) => Promise<void>>;
+    client: {
+      signIn: {
+        authenticateWithRedirect: import('vitest').Mock<(params: unknown) => Promise<void>>;
+      };
+      signUp: { status: string | null };
+    };
+  };
+}
+
+export function clerkResources(): ClerkResourceMocks {
+  return holder() as unknown as ClerkResourceMocks;
+}
+
+/** A Clerk API error as the future API returns it in `{ error }`. */
+export function clerkApiError(code: string, longMessage = 'Clerk error'): unknown {
+  return { errors: [{ code, message: longMessage, longMessage }] };
+}

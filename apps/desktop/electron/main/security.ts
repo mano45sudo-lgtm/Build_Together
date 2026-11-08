@@ -14,13 +14,13 @@ import { clerkCspSources } from './clerk-host';
  * renders blank. We relax `script-src` to `'self' 'unsafe-inline'` **only in dev**; the packaged
  * build keeps the strict policy because `isDev()` is false there.
  *
- * Clerk (ADR-0006): the auth screens mount Clerk's own prebuilt `<SignIn/>`/`<SignUp/>` components
- * (`@clerk/electron/react`), themed to the Monochrome palette via `ClerkProvider`'s `appearance`. Those
- * components load Clerk's client/UI bundle from the configured Clerk Frontend API host and open a
- * `wss://` session channel, so script/image/font policy must allow that exact host or the provider never
- * finishes loading and the app hangs on the boot splash (`isLoaded` stays false). Clerk's email/password
- * UI renders in-page (shadow DOM), not in an iframe, so `frame-src 'none'` stays. (If the Dashboard later
- * enables OAuth/Captcha, those flows need `frame-src`/extra hosts — revisit then, not preemptively.)
+ * Clerk (ADR-0006): the auth screens are our own components driving Clerk's hooks
+ * (`@clerk/electron/react`). `ClerkProvider` still loads Clerk's client bundle from the configured Clerk
+ * Frontend API host and opens a `wss://` session channel, so script/image/font policy must allow that
+ * exact host or the provider never finishes loading and the app hangs on the boot splash (`isLoaded`
+ * stays false). Google OAuth runs in the system browser, not an iframe, so `frame-src 'none'` stays.
+ * (If the Dashboard enables bot-protection captcha for sign-up, that widget needs `frame-src` and
+ * script hosts — revisit then, not preemptively.)
  */
 export function buildCspHeaderValue(): string {
   const clerkHost = process.env.CUE_CLERK_FRONTEND_API_HOST;

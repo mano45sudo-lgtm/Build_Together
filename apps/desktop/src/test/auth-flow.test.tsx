@@ -1,15 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { AuthSessionView, DesktopBridge, IpcOutcome } from '@buildtogether/shared';
-import { App } from '../App';
 import { AuthProvider, useAuth } from '../state/AuthProvider';
-import { OAUTH_ACCOUNT_PROMPT } from '../features/auth/clerk-appearance';
 import { setClerkIssuesToken, signInAsClerk, signOutFromClerk } from './clerk';
 
 /**
- * Auth flow coverage for the Google account-switching fix:
- *  - happy: both Clerk forms force Google's account chooser; sign in → out → in as another account
- *    re-syncs main with the new identity's token and session view.
+ * AuthProvider session handling (the account chooser itself is covered in auth-screen.test.tsx):
+ *  - happy: sign in → out → in as another account re-syncs main with the new identity's token and
+ *    session view.
  *  - error: Clerk signed-in without a token is a recoverable error, not a dead sign-in form.
  *  - edge: a failed Clerk sign-out re-syncs instead of showing a sign-in form over a live session.
  */
@@ -87,28 +85,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Google account selection', () => {
-  it('forces the account chooser on sign-in and sign-up OAuth', async () => {
-    expect(OAUTH_ACCOUNT_PROMPT).toBe('select_account');
-    render(<App />);
-    expect(await screen.findByTestId('clerk-sign-in')).toHaveAttribute(
-      'data-oidc-prompt',
-      'select_account',
-    );
-    expect(screen.getByRole('heading', { level: 1, name: /welcome back/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: /sign up/i }));
-    expect(await screen.findByTestId('clerk-sign-up')).toHaveAttribute(
-      'data-oidc-prompt',
-      'select_account',
-    );
-    expect(screen.getByRole('tab', { name: /sign up/i })).toHaveAttribute('aria-selected', 'true');
-    expect(
-      screen.getByRole('heading', { level: 1, name: /create your account/i }),
-    ).toBeInTheDocument();
-  });
-});
-
 describe('AuthProvider session handling', () => {
   it('signs out and signs back in as a different account with a fresh token and session', async () => {
     const { syncToken } = installAuthBridge();
@@ -164,5 +140,26 @@ describe('AuthProvider session handling', () => {
       holder.signOut = original;
       signOutFromClerk();
     }
+  });
+});
+
+describe('AuthProvider database outage', () => {
+  it('names the real problem instead of a generic error when the API cannot reach PostgreSQL', async () => {
+    installAuthBridge();
+    const bridge = window.bt as unknown as { auth: { me: ReturnType<typeof vi.fn> } };
+    bridge.auth.me.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'DATABASE_UNAVAILABLE', message: 'The service is temporarily unavailable.' },
+      }),
+    );
+    signInAsClerk('user_a');
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'), {
+      timeout: 5_000,
+    });
+    expect(screen.getByTestId('error')).toHaveTextContent(/postgresql/i);
+    // Retried before giving up: the first call plus three backoff attempts.
+    expect(bridge.auth.me).toHaveBeenCalledTimes(4);
   });
 });

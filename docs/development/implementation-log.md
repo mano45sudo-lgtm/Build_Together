@@ -1468,3 +1468,113 @@ embedded development values in a production renderer bundle. The URL rule was al
   `.env.development` is a manual step: agent access to `.env` files is denied by local settings.
 - Not run: a successful production build. It needs a real deployed HTTPS API origin and Clerk
   production host, which do not exist yet. Nothing was deployed.
+
+## Custom authentication screens (Clerk prebuilt UI removed) — 2026-11-08
+
+**Scope.** Replaced Clerk's prebuilt `<SignIn/>` / `<SignUp/>` with Cue's own auth screens, laid
+out after the supplied reference: wordmark pinned top-left, one centred 380px column, large heading
+and subtitle, "Continue with Google", a hairline, an Email field and a primary "Continue with email".
+Adapted to the Monochrome Dark tokens and the shared `Button` / `Input` / `Alert` primitives. Clerk
+still owns every credential, verification and session; this matches ADR-0006 ("our own Monochrome
+UI through the Clerk hooks — no prebuilt Clerk components").
+
+**Flow (`features/auth/useAuthFlow.ts`).** One email entry point serves both journeys:
+- `signIn.create({ identifier })` → existing account: password step if the account has one (with
+  "Email me a code instead" and "Forgot password?"), otherwise an emailed code.
+- `form_identifier_not_found` → `signUp.create({ emailAddress })` → emailed verification code →
+  a profile step showing only the fields Clerk reports missing (first/last name, username, password).
+- Password reset via `resetPasswordEmailCode`; two-step / new-device checks via `signIn.mfa`
+  (authenticator app, email or SMS code).
+- Google: `clerk.client.signIn.authenticateWithRedirect({ strategy: 'oauth_google', oidcPrompt:
+  'select_account' })`. Verified in clerk-js 6.42: only this legacy call goes through
+  `@clerk/electron`'s system-browser OAuth transport; the newer `signIn.sso()` navigates the window.
+- `ClerkProvider` now gets no-op `routerPush` / `routerReplace` (public props), so Clerk can never
+  navigate the renderer after a callback.
+
+**Other fixes.** The global `:focus-visible` rule moved into `@layer base`. Unlayered, it beat every
+Tailwind utility, so focused inputs anywhere in the app switched to 4px corners and drew a second
+outline over the component's own focus style. Removed `clerk-appearance.ts` and the `#auth-form`
+CSS overrides (dead with the prebuilt UI gone); `OAUTH_ACCOUNT_PROMPT` lives in `features/auth/oauth.ts`.
+
+**Verification.** Desktop `tsc --noEmit`, ESLint and Prettier clean. Vitest **13 files / 102 tests
+passed**, including the new `src/test/auth-screen.test.tsx` (13 cases: entry render, loading state,
+invalid email, Google account chooser + failure, email-code sign-in, wrong code, password sign-in,
+password reset, authenticator second factor, "Use a different email", sign-up with names, sign-up
+with required password). Rendered at 1280×800 and 375×812: controls 40px at 6px radius, no
+horizontal scroll, single white focus border, error state checked live with an invalid email.
+
+**Not verified live.** Real Clerk round-trips (sending codes, Google in the system browser, sign-up)
+were not exercised against the Clerk instance to avoid creating test accounts there; they are covered
+by mocked hook tests. The legal footer from the reference was omitted because the product has no
+Terms or Privacy URLs; add it once those exist. If the Clerk Dashboard enables sign-up bot
+protection, the captcha widget needs CSP changes (noted in `electron/main/security.ts`).
+
+## Post-sign-in error, explicit sign-up, auth loading screen — 2026-11-08
+
+**"Couldn't finish signing in / An unexpected error occurred" — root cause.** Clerk sign-in
+succeeded; the API's `/auth/me` then failed because the local PostgreSQL was down (Docker daemon not
+running; `/api/v1/health/ready` returned `DATABASE_NOT_READY`). With `@prisma/adapter-pg` a refused
+connection is a `PrismaClientKnownRequestError` whose `code` is the raw driver code `ECONNREFUSED`
+(confirmed by probing). The error handler only recognised `AppError`, so the outage became a generic
+500 the desktop could only echo.
+- API: `lib/database-errors.ts` classifies connectivity failures (Prisma init errors; P1001/P1002/
+  P1008/P1017/P2024; ECONNREFUSED/ECONNRESET/ETIMEDOUT/ENOTFOUND/EAI_AGAIN/EHOSTUNREACH; SQLSTATE
+  57P01–03, 08001, 08006). `error-handler.ts` returns **503 `DATABASE_UNAVAILABLE`** for them, logs
+  type + code only, never the driver message. Query errors (e.g. P2002) still map to 500.
+- Desktop: `AuthProvider` retries `DATABASE_UNAVAILABLE` like a network error (300/700/1400ms), then
+  shows a specific message: in development it names the fix (start Docker Desktop and `bt-postgres`),
+  in production a neutral "temporarily unavailable".
+- Operational fix still required locally: start Docker Desktop and the `bt-postgres` container.
+
+**Explicit sign-up.** The entry screen has a sign-in / sign-up switch under the form ("Don't have an
+account? Sign up" / "Already have an account? Sign in"). Sign-up mode ("Create your CUE account",
+"Sign up with Google", "Create account") calls `signUp.create` directly; an email that already has an
+account gets "An account already exists for this email. Sign in instead." Sign-in mode still
+continues an unknown email into sign-up rather than dead-ending.
+
+**Loading screen.** `features/auth/AuthLoadingScreen.tsx` replaces the static splash for every
+`checking` state: the CUE mark with a hairline ring and one orbiting arc, a status line that
+crossfades between real `AuthProvider` phases (`restoring` → "Starting CUE…", `verifying` →
+"Signing you in…", `workspace` → "Loading your workspace…"), and a thin indeterminate sweep. Built
+with the existing `motion` dependency; reduced motion renders it static.
+
+**Recovery screen.** Was left-aligned because its `<main>` had no width inside the window frame's flex
+row. Moved to `features/auth/AuthRecovery.tsx` on the shared `AuthLayout` (wordmark, centred column,
+error `Alert`, full-width "Try again" / "Return to sign in").
+
+**Verification.** Desktop: tsc, ESLint, Prettier clean; Vitest **14 files / 108 tests passed** (new:
+explicit sign-up, existing-account guidance, loading phases, database-outage message with retry
+count). API: tsc clean; `database-errors.unit.test.ts` + `database-readiness.unit.test.ts` **16
+passed** (run with a syntactically isolated `TEST_DATABASE_URL`; no DB connection). A broader API
+unit run hung with the database down and was stopped; not counted. Rendered the loading screen and
+sign-up mode in the browser at 1280×800. Not verified: a full sign-in against a running PostgreSQL.
+
+## Sign-up stalled on "Finish creating your account" — Clerk session task — 2026-11-08
+
+**Symptom.** After "Create account" the screen stayed put; pressing it again showed "You're already
+signed in."
+
+**Root cause (verified against Clerk).** The sign-up completed: Backend API showed the user created,
+email verified, password and names set, and one session with status **`pending`**. The Clerk
+instance has Organizations enabled with **force organization selection** (Frontend API
+`/v1/environment`: `organization_settings.force_organization_selection: true`), so every new session
+carries the `choose-organization` session task. Clerk treats pending sessions as signed out, so
+`isSignedIn` never flipped and `AuthProvider` never took over. Clerk's prebuilt UI used to render the
+task; the custom flow did not. The second click hit `session_exists`. Cue does not use Clerk
+organizations anywhere (workspaces are Cue's own, in PostgreSQL), so the setting conflicts with the
+architecture.
+
+**Code changes.** `useAuthFlow` now detects a pending session after `finalize()`, after Google, on
+mount (pending sessions survive restarts) and on `session_exists`, and shows a new `session-task`
+step (`steps/SessionTaskStep.tsx`). It names the task (`choose-organization`, `reset-password`,
+`setup-mfa`). In development it names the Clerk Dashboard fix; in production it gives neutral wording.
+It offers "Sign out and start over" (`clerk.signOut()`) and "Check again" (session reload, then
+`setActive` if the task cleared).
+
+**Required configuration fix (not done by the agent).** Clerk Dashboard → Organizations: turn off
+"Membership required" / force organization selection, then sign out of the pending session and sign
+in again. The account already exists, so sign in with the same email and password.
+
+**Verification.** Desktop tsc, ESLint, Prettier clean; Vitest **14 files / 111 tests passed** (new:
+pending task after sign-up, pending session on launch + sign-out, `session_exists` handled). Not
+verified live: the full flow after the dashboard setting is changed.

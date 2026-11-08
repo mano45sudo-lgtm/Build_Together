@@ -1,7 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import { createElement } from 'react';
 
 // Keep the ApiStatusIndicator from opening a real socket during unit tests.
 globalThis.fetch = vi.fn(() =>
@@ -15,7 +14,58 @@ globalThis.fetch = vi.fn(() =>
 vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_mock');
 
 const clerk = vi.hoisted(() => {
-  const noError = async () => ({ error: null });
+  const ok = () => vi.fn(async () => ({ error: null as unknown }));
+
+  // Fresh, controllable stand-ins for Clerk's future-API resources. Tests reshape them through the
+  // holder (src/test/clerk.ts) — e.g. `clerk.signIn.create.mockResolvedValue({ error })`.
+  function createSignIn() {
+    return {
+      status: 'needs_identifier' as string,
+      supportedFirstFactors: [] as { strategy: string }[],
+      supportedSecondFactors: [] as { strategy: string }[],
+      create: ok(),
+      password: ok(),
+      finalize: ok(),
+      reset: ok(),
+      emailCode: { sendCode: ok(), verifyCode: ok() },
+      resetPasswordEmailCode: { sendCode: ok(), verifyCode: ok(), submitPassword: ok() },
+      mfa: {
+        sendEmailCode: ok(),
+        verifyEmailCode: ok(),
+        sendPhoneCode: ok(),
+        verifyPhoneCode: ok(),
+        verifyTOTP: ok(),
+      },
+    };
+  }
+
+  function createSignUp() {
+    return {
+      status: 'missing_requirements' as string,
+      missingFields: [] as string[],
+      unverifiedFields: [] as string[],
+      create: ok(),
+      update: ok(),
+      password: ok(),
+      finalize: ok(),
+      reset: ok(),
+      verifications: { sendEmailCode: ok(), verifyEmailCode: ok() },
+    };
+  }
+
+  function createClient() {
+    return {
+      loaded: true,
+      session: null as unknown,
+      signOut: vi.fn(async () => undefined),
+      setActive: vi.fn(async (_params: unknown) => undefined),
+      client: {
+        signIn: { authenticateWithRedirect: vi.fn(async (_params: unknown) => undefined) },
+        signUp: { status: null as string | null },
+      },
+    };
+  }
+
   return {
     state: {
       isLoaded: true,
@@ -30,27 +80,13 @@ const clerk = vi.hoisted(() => {
       clerk.state.isSignedIn = false;
       clerk.state.userId = null;
     },
-    signIn: {
-      status: 'needs_identifier',
-      createdSessionId: null,
-      sso: noError,
-      create: noError,
-      password: noError,
-      finalize: noError,
-      reset: noError,
-      emailCode: { sendCode: noError, verifyCode: noError },
-      resetPasswordEmailCode: { sendCode: noError, verifyCode: noError, submitPassword: noError },
-    },
-    signUp: {
-      status: 'missing_requirements',
-      createdSessionId: null,
-      unverifiedFields: [] as string[],
-      sso: noError,
-      create: noError,
-      password: noError,
-      finalize: noError,
-      reset: noError,
-      verifications: { sendEmailCode: noError, verifyEmailCode: noError },
+    signIn: createSignIn(),
+    signUp: createSignUp(),
+    clerk: createClient(),
+    reset() {
+      clerk.signIn = createSignIn();
+      clerk.signUp = createSignUp();
+      clerk.clerk = createClient();
     },
   };
 });
@@ -64,25 +100,9 @@ vi.mock('@clerk/electron/react', () => ({
     getToken: clerk.getToken,
     signOut: clerk.signOut,
   }),
-  // `data-oidc-prompt` surfaces the OAuth prompt prop so tests can assert the account chooser is forced.
-  SignIn: ({ oidcPrompt }: { oidcPrompt?: string }) =>
-    createElement(
-      'div',
-      { 'data-testid': 'clerk-sign-in', 'data-oidc-prompt': oidcPrompt },
-      createElement('h1', null, 'Sign in to your account'),
-      createElement('input', { 'aria-label': 'Email', type: 'email' }),
-      createElement('input', { 'aria-label': 'Password', type: 'password' }),
-      createElement('button', { type: 'button' }, 'Continue with Google'),
-      createElement('a', { href: '#/sign-up' }, 'Sign up'),
-    ),
-  SignUp: ({ oidcPrompt }: { oidcPrompt?: string }) =>
-    createElement(
-      'div',
-      { 'data-testid': 'clerk-sign-up', 'data-oidc-prompt': oidcPrompt },
-      createElement('h2', null, 'Clerk sign-up form'),
-    ),
   useSignIn: () => ({ signIn: clerk.signIn, errors: {}, fetchStatus: 'idle' }),
   useSignUp: () => ({ signUp: clerk.signUp, errors: {}, fetchStatus: 'idle' }),
+  useClerk: () => clerk.clerk,
 }));
 
 // Register the holder on globalThis so the typed test helper (src/test/clerk.ts) can drive the state.
@@ -94,6 +114,7 @@ beforeEach(() => {
   clerk.state.isSignedIn = false;
   clerk.state.userId = null;
   clerk.state.issuesToken = true;
+  clerk.reset();
 });
 
 // Vitest does not enable RTL auto-cleanup without globals; unmount between tests explicitly.

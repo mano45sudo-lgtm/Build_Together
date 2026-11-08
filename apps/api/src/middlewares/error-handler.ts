@@ -1,6 +1,7 @@
 import type { ApiResponse } from '@buildtogether/shared';
 import type { NextFunction, Request, Response } from 'express';
 import { AppError } from '../errors/app-error.js';
+import { isDatabaseUnavailableError } from '../lib/database-errors.js';
 import { logger } from '../lib/logger.js';
 
 /**
@@ -34,6 +35,26 @@ export function errorHandler(
       },
     };
     res.status(err.statusCode).json(body);
+    return;
+  }
+
+  // An unreachable database is an outage, not a bug: say so (503, retryable) instead of the
+  // generic 500, so clients can tell the user what is wrong. Never echo the driver message.
+  if (isDatabaseUnavailableError(err)) {
+    logger.error('database unavailable', {
+      requestId,
+      path: req.path,
+      errorType: err instanceof Error ? err.name : 'UnknownError',
+      code: (err as { code?: unknown }).code,
+    });
+    const body: ApiResponse<null> = {
+      data: null,
+      error: {
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'The service is temporarily unavailable. Try again shortly.',
+      },
+    };
+    res.status(503).json(body);
     return;
   }
 

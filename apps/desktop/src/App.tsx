@@ -3,14 +3,14 @@ import { Hammer } from 'lucide-react';
 import { ClerkProvider } from '@clerk/electron/react';
 import { AppShell } from './layouts/AppShell';
 import { Dialog } from './components/ui/Dialog';
-import { Button } from './components/ui/Button';
 import { Input } from './components/ui/Input';
 import { Spinner } from './components/ui/Spinner';
 import { DesktopWindowFrame } from './components/DesktopWindowFrame';
 import { NAV_ITEMS, type NavId } from './lib/nav';
 import { AuthProvider, useAuth } from './state/AuthProvider';
 import { WelcomeScreen } from './features/auth/WelcomeScreen';
-import { clerkAppearance } from './features/auth/clerk-appearance';
+import { AuthLoadingScreen } from './features/auth/AuthLoadingScreen';
+import { AuthRecovery } from './features/auth/AuthRecovery';
 import { HomeScreen } from './features/home/HomeScreen';
 import { MyWorkScreen } from './features/mywork/MyWorkScreen';
 import { TeamScreen } from './features/team/TeamScreen';
@@ -30,46 +30,8 @@ const MessagesScreen = lazy(() =>
   import('./features/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })),
 );
 
-/** Boot splash shown while the persisted desktop session is being restored. */
-function Splash({ message = 'Loading CUE…' }: { message?: string }) {
-  return (
-    <div className="flex h-full min-h-0 items-center justify-center gap-3 bg-canvas text-secondary">
-      <Hammer className="size-5 text-accent" aria-hidden="true" />
-      <Spinner />
-      <span className="text-sm">{message}</span>
-    </div>
-  );
-}
-
-function AuthRecovery({
-  message,
-  onRetry,
-  onSignOut,
-}: {
-  message: string;
-  onRetry: () => void;
-  onSignOut: () => void;
-}) {
-  return (
-    <main className="flex h-full min-h-0 items-center justify-center bg-canvas px-6 text-primary">
-      <section className="w-full max-w-md rounded-xl border border-border-subtle bg-surface-1 p-6">
-        <h1 className="text-lg font-semibold">Couldn’t finish signing in</h1>
-        <p role="alert" className="mt-3 text-sm leading-6 text-secondary">
-          {message}
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={onRetry}>Try again</Button>
-          <Button variant="secondary" onClick={onSignOut}>
-            Return to sign in
-          </Button>
-        </div>
-      </section>
-    </main>
-  );
-}
-
 function ShellContent() {
-  const { status, session, signOut, clerkLoaded, authError, retryAuth } = useAuth();
+  const { status, phase, session, signOut, authError, retryAuth } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
@@ -94,8 +56,7 @@ function ShellContent() {
     if (activeId === 'messages') setChatMounted(true);
   }, [activeId]);
 
-  if (status === 'checking')
-    return <Splash message={clerkLoaded ? 'Finishing sign-in…' : 'Loading CUE…'} />;
+  if (status === 'checking') return <AuthLoadingScreen phase={phase} />;
   if (status === 'error') {
     return (
       <AuthRecovery
@@ -109,7 +70,7 @@ function ShellContent() {
     );
   }
   if (status === 'signed-out') return <WelcomeScreen />;
-  if (!session) return <Splash message="Preparing your workspace…" />;
+  if (!session) return <AuthLoadingScreen phase="workspace" />;
 
   const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
 
@@ -217,6 +178,13 @@ function Shell() {
   );
 }
 
+/**
+ * The desktop renderer has no URL routes: the custom auth screens decide every step, and the session
+ * swap is driven by AuthProvider. Clerk must therefore never navigate the window (a navigation could
+ * reload the renderer mid-OAuth), so its router hooks are deliberate no-ops.
+ */
+function ignoreClerkNavigation(): void {}
+
 export function App() {
   // Clerk owns authentication (ADR-0006). The publishable key is a public, non-secret value that must
   // be provided via the environment; without it Clerk cannot initialize, so we surface an explicit
@@ -235,7 +203,11 @@ export function App() {
     );
   }
   return (
-    <ClerkProvider publishableKey={publishableKey} appearance={clerkAppearance}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      routerPush={ignoreClerkNavigation}
+      routerReplace={ignoreClerkNavigation}
+    >
       <AuthProvider>
         <Shell />
       </AuthProvider>

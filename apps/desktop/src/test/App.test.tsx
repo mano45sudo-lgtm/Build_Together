@@ -109,19 +109,16 @@ afterEach(() => {
 describe('desktop shell', () => {
   it('shows the sign-in gate when there is no authenticated session', async () => {
     render(<App />);
-    expect(
-      await screen.findByRole('heading', { name: /sign in to your account/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /welcome to cue/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /sign up/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument();
   });
 
   it('shows one stable loading state before Clerk UI is ready', async () => {
     setClerkLoaded(false);
     render(<App />);
-    expect(await screen.findByText(/loading cue/i)).toBeInTheDocument();
+    expect(await screen.findByText(/starting cue/i)).toBeInTheDocument();
     expect(screen.queryByRole('tablist', { name: /authentication mode/i })).not.toBeInTheDocument();
   });
 

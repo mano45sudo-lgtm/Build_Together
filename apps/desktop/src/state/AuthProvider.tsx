@@ -24,10 +24,14 @@ import { BridgeError, errorMessage, hasBridge, requireBridge, unwrap } from '../
 
 export type AuthStatus = 'checking' | 'signed-out' | 'signed-in' | 'error';
 
+/** What `checking` is waiting on, so the loading screen can report real progress. */
+export type AuthPhase = 'restoring' | 'verifying' | 'workspace';
+
 interface AuthContextValue {
   status: AuthStatus;
   /** Clerk initialization is independent from BuildTogether's API session lookup. */
   clerkLoaded: boolean;
+  phase: AuthPhase;
   authError: string | null;
   session: AuthSessionView | null;
   workspaces: WorkspaceSummary[];
@@ -51,6 +55,9 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+/** Transient failures worth a short retry before showing the recovery screen. */
+const RETRYABLE_API_CODES = new Set(['NETWORK_ERROR', 'DATABASE_UNAVAILABLE']);
+
 async function loadSessionWithRetry(
   bridge: ReturnType<typeof requireBridge>,
 ): Promise<AuthSessionView | null> {
@@ -61,7 +68,7 @@ async function loadSessionWithRetry(
       const delay = API_RETRY_DELAYS_MS[attempt];
       if (
         !(error instanceof BridgeError) ||
-        error.code !== 'NETWORK_ERROR' ||
+        !RETRYABLE_API_CODES.has(error.code) ||
         delay === undefined
       ) {
         throw error;
@@ -92,6 +99,12 @@ function authFailureMessage(error: unknown): string {
   if (error instanceof BridgeError && error.code === 'NETWORK_ERROR') {
     return 'Cue could not connect to its API. Confirm the API is running, then try again.';
   }
+  if (error instanceof BridgeError && error.code === 'DATABASE_UNAVAILABLE') {
+    // Development is local Docker PostgreSQL, so name the fix; production users get the outage notice.
+    return import.meta.env.DEV
+      ? "You're signed in, but the local API can't reach PostgreSQL. Start Docker Desktop and the bt-postgres container, then try again."
+      : 'Cue is temporarily unavailable. Try again in a moment.';
+  }
   return errorMessage(error);
 }
 
@@ -104,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, userId, getToken, signOut: clerkSignOut } = useClerkAuth();
 
   const [status, setStatus] = useState<AuthStatus>('checking');
+  const [phase, setPhase] = useState<AuthPhase>('restoring');
   const [session, setSession] = useState<AuthSessionView | null>(null);
   const [activeWorkspaceId, setActiveId] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -131,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveId(null);
       setAuthError(null);
       setStatus('checking');
+      setPhase('restoring');
       const timeout = window.setTimeout(() => {
         setAuthError('Clerk is taking longer than expected to restore your session.');
         setStatus('error');
@@ -148,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let timedOut = false;
     setStatus('checking');
+    setPhase('verifying');
     setAuthError(null);
     const timeout = window.setTimeout(() => {
       timedOut = true;
@@ -174,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await unwrap(bridge.auth.syncToken(token));
         if (cancelled || timedOut) return;
+        setPhase('workspace');
         const view = await loadSessionWithRetry(bridge);
         if (cancelled || timedOut) return;
         if (view) applySession(view);
@@ -239,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       status,
       clerkLoaded: isLoaded,
+      phase,
       authError,
       session,
       workspaces: session?.workspaces ?? [],
@@ -249,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refresh,
       retryAuth,
     };
-  }, [status, authError, session, activeWorkspaceId, signOut, refresh, retryAuth]);
+  }, [status, phase, authError, session, activeWorkspaceId, signOut, refresh, retryAuth]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

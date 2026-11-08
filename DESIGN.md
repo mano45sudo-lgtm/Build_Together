@@ -151,9 +151,9 @@ empty state uses the same motif family so they read as siblings, not four illust
 brand mark is the Lucide `Hammer` (there is no separate logo asset) — `BrandMarkBackground` reuses it
 rather than approximating it.
 
-**Screens enhanced:** WelcomeScreen (mark + lighting), HomeScreen greeting (plates + lighting),
+**Screens enhanced:** HomeScreen greeting (plates + lighting),
 ProjectsScreen header (fading grid + lighting whisper), and the first-run empty states for projects,
-archived projects, tasks and decisions. **Deliberately plain:** My Work, the Decision Vault list and
+archived projects, tasks and decisions. **Deliberately plain:** the auth screens (a single centred column under the wordmark), My Work, the Decision Vault list and
 detail, Team lists, Settings, chat panes, all search/error empties, and the sidebar/top-bar chrome —
 these are information-dense or functional and gain nothing from decoration. ("Connected Apps" is a
 future phase and has no screen to enhance yet.)
