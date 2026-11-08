@@ -1,0 +1,41 @@
+# Build context = repository root. Allow-list: send only what the API image needs, then strip
+# anything sensitive or generated that could live inside those paths.
+
+# Deny everything by default.
+*
+
+# Workspace manifests and lockfile.
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+
+# API and shared package sources; desktop contributes its manifest only (lockfile consistency).
+!apps/api/
+!packages/shared/
+!apps/desktop/package.json
+
+# Never send secrets, local dependencies, build output, tests or tooling caches.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/node_modules
+**/dist
+**/out
+**/release
+**/coverage
+**/*.log
+**/.DS_Store
+apps/api/src/**/*.test.ts
+apps/api/src/test
+apps/api/src/tests
+
+# Explicitly excluded even though the allow-list already omits them.
+.git
+.github
+.claude
+docs
+e2e
+apps/desktop/src
+apps/desktop/electron

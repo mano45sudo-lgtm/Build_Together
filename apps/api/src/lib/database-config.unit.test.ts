@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { loadDatabaseSettings, resolveDatabaseConnectionString } from './database-config.js';
+import {
+  loadDatabaseSettings,
+  resolveDatabaseConnectionString,
+  resolveMigrationConnectionString,
+} from './database-config.js';
 
 describe('database configuration', () => {
   it('uses bounded conservative pool defaults for local development', () => {
@@ -60,5 +64,55 @@ describe('database configuration', () => {
       }),
     );
     expect(local.searchParams.get('sslmode')).toBe('disable');
+  });
+
+  describe('Prisma CLI (schema engine) connection string', () => {
+    const raw = 'postgresql://user:pass@db.internal:5432/cue?sslmode=prefer&sslrootcert=/x.crt';
+
+    it('translates verify-full into the engine strict mode with the CA as sslcert', () => {
+      const url = new URL(
+        resolveMigrationConnectionString(raw, {
+          sslMode: 'verify-full',
+          sslRootCert: '/etc/cue/db-ca.crt',
+        }),
+      );
+      expect(url.searchParams.get('sslmode')).toBe('require');
+      expect(url.searchParams.get('sslaccept')).toBe('strict');
+      expect(url.searchParams.get('sslcert')).toBe('/etc/cue/db-ca.crt');
+      expect(url.searchParams.has('sslrootcert')).toBe(false);
+      expect(url.hostname).toBe('db.internal');
+    });
+
+    it('keeps strict verification against the system trust store when no CA is configured', () => {
+      const url = new URL(resolveMigrationConnectionString(raw, { sslMode: 'verify-full' }));
+      expect(url.searchParams.get('sslaccept')).toBe('strict');
+      expect(url.searchParams.has('sslcert')).toBe(false);
+      expect(url.searchParams.has('sslrootcert')).toBe(false);
+    });
+
+    it('never produces an unverified mode for verify-full', () => {
+      const url = new URL(resolveMigrationConnectionString(raw, { sslMode: 'verify-full' }));
+      expect(url.searchParams.get('sslaccept')).not.toBe('accept_invalid_certs');
+      expect(url.searchParams.get('sslmode')).not.toBe('prefer');
+    });
+
+    it('leaves local disable mode unchanged and the runtime resolver untouched', () => {
+      expect(resolveMigrationConnectionString(raw, { sslMode: 'disable' })).toBe(
+        resolveDatabaseConnectionString(raw, { sslMode: 'disable' }),
+      );
+      const runtime = new URL(resolveDatabaseConnectionString(raw, { sslMode: 'verify-full' }));
+      expect(runtime.searchParams.get('sslmode')).toBe('verify-full');
+    });
+
+    it('still rejects client-certificate input and non-PostgreSQL URLs', () => {
+      expect(() =>
+        resolveMigrationConnectionString('postgresql://u@h/db?sslcert=/c.pem', {
+          sslMode: 'verify-full',
+        }),
+      ).toThrow(/client-certificate/);
+      expect(() =>
+        resolveMigrationConnectionString('mysql://u@h/db', { sslMode: 'disable' }),
+      ).toThrow(/PostgreSQL/);
+    });
   });
 });

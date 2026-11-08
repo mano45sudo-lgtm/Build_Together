@@ -1394,6 +1394,7 @@ documented Clerk prop that clerk-js forwards as `oidc_prompt` on the sign-in/sig
 Google always shows its account chooser.
 
 **Session handling fixes (`state/AuthProvider.tsx`).**
+
 - If Clerk reported signed-in but `getToken()` returned null (possible right after the OAuth
   callback), the provider dropped to `signed-out` and nothing re-ran the handoff, leaving a signed-in
   user stranded on the sign-in form. It now retries the token briefly (300/700/1400ms) and otherwise
@@ -1416,6 +1417,7 @@ those (40px controls, 6px radius, hairline borders, white focus ring, near-white
 `#auth-form` rules in `styles/index.css`.
 
 **Verification.**
+
 - Desktop: `tsc --noEmit` passed; Vitest **11 files / 61 tests passed**, including the new
   `src/test/auth-flow.test.tsx` (4): account chooser forced on sign-in and sign-up; sign out → sign
   in as a second account re-syncs main with the new token and session; null-token → recoverable
@@ -1440,6 +1442,7 @@ embedded development values in a production renderer bundle. The URL rule was al
 (inline in `electron.vite.config.ts` and in `electron/main/api-config.ts`).
 
 **Changes.**
+
 - `electron/main/api-config.ts`: separate `validateDevelopmentApiBaseUrl` (any HTTP(S) origin,
   default `http://localhost:4000`) and `validateProductionApiBaseUrl` (required, `https:` only,
   public host). Production was tightened, not loosened: it now also rejects `*.localhost`, the whole
@@ -1460,6 +1463,7 @@ embedded development values in a production renderer bundle. The URL rule was al
   with strict production checks), and its build is environment-independent `tsc`.
 
 **Verification.**
+
 - Desktop `tsc --noEmit` passed. Electron unit tests: 4 files / 44 tests passed (new validator and
   build-env cases); full desktop suite run separately below.
 - `pnpm desktop:build:dev` succeeded with the existing local configuration.
@@ -1479,6 +1483,7 @@ still owns every credential, verification and session; this matches ADR-0006 ("o
 UI through the Clerk hooks — no prebuilt Clerk components").
 
 **Flow (`features/auth/useAuthFlow.ts`).** One email entry point serves both journeys:
+
 - `signIn.create({ identifier })` → existing account: password step if the account has one (with
   "Email me a code instead" and "Forgot password?"), otherwise an emailed code.
 - `form_identifier_not_found` → `signUp.create({ emailAddress })` → emailed verification code →
@@ -1486,7 +1491,7 @@ UI through the Clerk hooks — no prebuilt Clerk components").
 - Password reset via `resetPasswordEmailCode`; two-step / new-device checks via `signIn.mfa`
   (authenticator app, email or SMS code).
 - Google: `clerk.client.signIn.authenticateWithRedirect({ strategy: 'oauth_google', oidcPrompt:
-  'select_account' })`. Verified in clerk-js 6.42: only this legacy call goes through
+'select_account' })`. Verified in clerk-js 6.42: only this legacy call goes through
   `@clerk/electron`'s system-browser OAuth transport; the newer `signIn.sso()` navigates the window.
 - `ClerkProvider` now gets no-op `routerPush` / `routerReplace` (public props), so Clerk can never
   navigate the renderer after a callback.
@@ -1517,6 +1522,7 @@ running; `/api/v1/health/ready` returned `DATABASE_NOT_READY`). With `@prisma/ad
 connection is a `PrismaClientKnownRequestError` whose `code` is the raw driver code `ECONNREFUSED`
 (confirmed by probing). The error handler only recognised `AppError`, so the outage became a generic
 500 the desktop could only echo.
+
 - API: `lib/database-errors.ts` classifies connectivity failures (Prisma init errors; P1001/P1002/
   P1008/P1017/P2024; ECONNREFUSED/ECONNRESET/ETIMEDOUT/ENOTFOUND/EAI_AGAIN/EHOSTUNREACH; SQLSTATE
   57P01–03, 08001, 08006). `error-handler.ts` returns **503 `DATABASE_UNAVAILABLE`** for them, logs
@@ -1578,3 +1584,54 @@ in again. The account already exists, so sign in with the same email and passwor
 **Verification.** Desktop tsc, ESLint, Prettier clean; Vitest **14 files / 111 tests passed** (new:
 pending task after sign-up, pending session on launch + sign-out, `session_exists` handled). Not
 verified live: the full flow after the dashboard setting is changed.
+
+## Deployment Phase 0 — readiness audit (audit only) — 2026-11-08
+
+Audit of the API and desktop build for Railway + Cloudflare (later ECS Fargate + RDS). Full report:
+[`docs/deployment/PHASE0_READINESS_AUDIT.md`](../deployment/PHASE0_READINESS_AUDIT.md). Verdict:
+NOT READY. Four blockers: no Dockerfile; no runtime-image strategy for the Prisma CLI and generated
+client; required `verify-full` database TLS vs Railway Postgres (decision needed); production values
+not yet defined. Checks run: typecheck and lint pass; API unit 58/58 and desktop 111/111 pass;
+`pnpm audit --prod` clean; integration suite not run (no isolated `cue_test` database; creating one
+needs migrations). The known Clerk adapter unit-test failure was investigated: fixed in `6f9f340`
+by `vi.resetModules()` in the test (test-isolation issue), verified passing under both Vitest configs.
+No source files, migrations, installs or production services were touched. Phase 1 not started.
+
+## Deployment Batch 0A — containerization — 2026-11-08
+
+Root multi-stage `Dockerfile` (`os` → `base` → `build` → `runtime` on `node:24-bookworm-slim`) and
+allow-list `.dockerignore`; details and verification in
+[`docs/deployment/DOCKER_IMAGE.md`](../deployment/DOCKER_IMAGE.md). Node 24 pinned (`.nvmrc`, root
+and API `engines: >=24.0.0 <25`). `prisma` moved from API devDependencies to dependencies (same
+7.10.1; lockfile change is that move only) so the image keeps the CLI for the future
+`prisma migrate deploy`. `pnpm deploy --prod --legacy` avoids enabling workspace-wide injection.
+
+Verified with a local build: production start on the injected `PORT`, non-root `node` user, PID 1
+`node dist/index.js`, liveness 200, readiness 503 without a database, SIGTERM/SIGINT graceful exit 0,
+production TLS and Clerk guards intact, Prisma config loads and schema validates in-image, argon2
+glibc binding loads, no secrets or stray files. Local `pnpm install --frozen-lockfile`, typecheck,
+lint and API unit tests (58/58) still pass. No deployment, no migrations, no database contact.
+
+## Deployment Batch 0B — Prisma migrations and database TLS — 2026-11-08
+
+Added API script `db:migrate:deploy` (`prisma migrate deploy`); runs in the image as
+`npm run db:migrate:deploy`, intended as Railway's pre-deploy command, never at API startup. Details:
+[`docs/deployment/DATABASE_DEPLOYMENT.md`](../deployment/DATABASE_DEPLOYMENT.md).
+
+**Security finding fixed.** Against a disposable TLS-only PostgreSQL with a throwaway private CA, the
+Prisma CLI connected with `verify-full` but no CA, and to a hostname absent from the certificate: its
+Rust schema engine ignores libpq `verify-full`/`sslrootcert`, so migrations were encrypted but
+unauthenticated. The runtime `pg` path correctly rejected both. Added
+`resolveMigrationConnectionString()` (used only by `prisma.config.ts`), which maps `verify-full` to
+the engine's strict mode `sslmode=require&sslaccept=strict&sslcert=<CA>`. Re-measured: correct CA
+and host connect; missing CA and wrong host are rejected. Runtime resolver unchanged.
+
+**Validation.** All 8 migrations applied from empty through the image with production TLS settings;
+re-run is a no-op; `_prisma_migrations` 8 finished rows with checksums equal to the committed files;
+`migrate status` up to date; `validate` passes; `migrate diff` vs `schema.prisma` reports no
+difference; 21 tables / 19 enums match the schema. Disposable database, volumes, network and
+password removed; `bt-postgres` untouched. Railway TLS researched from Railway docs (silent on
+Postgres TLS) and the `postgres-ssl` image source (private CA; SAN `localhost` +
+`RAILWAY_PRIVATE_DOMAIN`; TLS optional server-side; CA regenerated near expiry). Open: supplying the
+CA file to Railway containers, and live verification (plan documented, needs approval).
+Runtime image also sets `NPM_CONFIG_UPDATE_NOTIFIER=false`. API unit tests 63/63.

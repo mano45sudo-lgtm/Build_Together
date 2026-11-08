@@ -131,3 +131,29 @@ export function resolveDatabaseConnectionString(
 
   return url.toString();
 }
+
+/**
+ * Connection string for the Prisma CLI (`migrate deploy`, `migrate status`, `migrate diff`).
+ *
+ * The CLI's Rust schema engine does not implement libpq's `sslmode=verify-full`/`sslrootcert`: in a
+ * measured test against a TLS-only server it connected with no CA file and to a hostname absent
+ * from the certificate, i.e. encrypted but unauthenticated. Its own strict mode does verify both
+ * chain and hostname, so `verify-full` is translated to `sslmode=require&sslaccept=strict` with the
+ * CA passed as Prisma's `sslcert` (a root certificate here, not a client certificate). Without a
+ * configured CA, strict mode uses the system trust store. The runtime `pg` pool keeps
+ * {@link resolveDatabaseConnectionString}.
+ */
+export function resolveMigrationConnectionString(
+  rawUrl: string,
+  settings: Pick<DatabaseSettings, 'sslMode' | 'sslRootCert'>,
+): string {
+  const resolved = resolveDatabaseConnectionString(rawUrl, settings);
+  if (!resolved || settings.sslMode === 'disable') return resolved;
+
+  const url = new URL(resolved);
+  url.searchParams.delete('sslrootcert');
+  url.searchParams.set('sslmode', 'require');
+  url.searchParams.set('sslaccept', 'strict');
+  if (settings.sslRootCert) url.searchParams.set('sslcert', settings.sslRootCert);
+  return url.toString();
+}
