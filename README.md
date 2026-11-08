@@ -193,9 +193,13 @@ DESIGN.md             visual language (monochrome design system)
 
 ```bash
 pnpm install                                   # at the repo root
-cp apps/desktop/.env.example apps/desktop/.env
+cp apps/desktop/.env.development.example apps/desktop/.env.development
 cp apps/api/.env.example     apps/api/.env     # fill local values; never commit .env
 ```
+
+Desktop values are per mode: `.env.development` for `pnpm dev` / `pnpm desktop:dev`, and
+`.env.production` (from `.env.production.example`) for `pnpm build` / `pnpm desktop:build`. Do not
+put API URLs or Clerk keys in `apps/desktop/.env`; a production build refuses to run if you do.
 
 ### 2. Start PostgreSQL
 
@@ -221,8 +225,10 @@ pnpm --filter @buildtogether/api dev   # API on http://localhost:4000
 pnpm desktop:dev                       # Electron + renderer (HMR on :5173)
 ```
 
-Desktop build and packaging: `pnpm desktop:build` (bundles to `apps/desktop/out`); installers via
-`pnpm desktop:package` (electron-builder, configured).
+Desktop build and packaging: `pnpm desktop:build` is a **production** build (bundles to
+`apps/desktop/out`) and needs a valid `.env.production` or the same variables in the build
+environment; `pnpm desktop:build:dev` compiles the same bundle against the development
+configuration; installers via `pnpm desktop:package` (electron-builder, production).
 
 > Chat is optional at runtime. Leaving `NEXCONN_APP_KEY` / `NEXCONN_APP_SECRET` unset disables the
 > chat module and it fails closed; every other feature works normally.

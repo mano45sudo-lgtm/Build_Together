@@ -37,11 +37,11 @@ export function errorHandler(
     return;
   }
 
-  // Unexpected: log the real error (server-side only), return a generic envelope.
+  // Error messages can contain SQL/provider detail or credentials; log only the class name.
   logger.error('unhandled error', {
     requestId,
     path: req.path,
-    error: err instanceof Error ? err.message : String(err),
+    errorType: err instanceof Error ? err.name : 'UnknownError',
   });
   const body: ApiResponse<null> = {
     data: null,

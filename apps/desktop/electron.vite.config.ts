@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { loadEnv } from 'vite';
 import { resolveClerkFrontendApiHost } from './electron/main/clerk-host';
+import { resolveApiBaseUrlFor } from './electron/main/api-config';
+import { assertNoSharedEnvironmentValues, buildEnvironmentForMode } from './electron/build-env';
 
 /**
  * electron-vite build model for BuildTogether desktop:
@@ -29,11 +31,22 @@ const bundleSharedAndClerk = externalizeDepsPlugin({
 });
 
 export default defineConfig(({ mode }) => {
-  const fileEnv = loadEnv(mode, import.meta.dirname, '');
+  // Development and production are separate configurations: `electron-vite dev` uses mode
+  // "development" (.env.development), `electron-vite build` uses "production" (.env.production).
+  // Real process env wins over files so CI can inject production values without a file on disk.
+  const environment = buildEnvironmentForMode(mode);
+  const envDir = import.meta.dirname;
+  // Shared files are read in every mode; only a production build is harmed by what they hold.
+  if (environment === 'production') assertNoSharedEnvironmentValues(envDir);
+  const fileEnv = loadEnv(mode, envDir, '');
+  const setting = (key: string): string | undefined => process.env[key] ?? fileEnv[key];
+
+  // Same validator the main process re-applies at runtime, so a bad endpoint fails the build.
+  const apiBaseUrl = resolveApiBaseUrlFor(environment, setting('BT_API_BASE_URL'));
   const clerkFrontendApiHost = resolveClerkFrontendApiHost({
-    host: process.env.VITE_CLERK_FRONTEND_API_HOST ?? fileEnv.VITE_CLERK_FRONTEND_API_HOST,
-    publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY ?? fileEnv.VITE_CLERK_PUBLISHABLE_KEY,
-    development: mode !== 'production',
+    host: setting('VITE_CLERK_FRONTEND_API_HOST'),
+    publishableKey: setting('VITE_CLERK_PUBLISHABLE_KEY'),
+    development: environment === 'development',
   });
 
   return {
@@ -41,6 +54,7 @@ export default defineConfig(({ mode }) => {
       plugins: [bundleShared],
       define: {
         'process.env.CUE_CLERK_FRONTEND_API_HOST': JSON.stringify(clerkFrontendApiHost ?? ''),
+        CUE_API_BASE_URL: JSON.stringify(apiBaseUrl),
       },
       build: { lib: { entry: resolve('electron/main/index.ts') } },
     },

@@ -10,6 +10,7 @@ import { DesktopWindowFrame } from './components/DesktopWindowFrame';
 import { NAV_ITEMS, type NavId } from './lib/nav';
 import { AuthProvider, useAuth } from './state/AuthProvider';
 import { WelcomeScreen } from './features/auth/WelcomeScreen';
+import { clerkAppearance } from './features/auth/clerk-appearance';
 import { HomeScreen } from './features/home/HomeScreen';
 import { MyWorkScreen } from './features/mywork/MyWorkScreen';
 import { TeamScreen } from './features/team/TeamScreen';
@@ -28,61 +29,6 @@ import { SettingsScreen } from './features/settings/SettingsScreen';
 const MessagesScreen = lazy(() =>
   import('./features/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })),
 );
-
-const clerkAppearance = {
-  variables: {
-    colorPrimary: '#fafafa',
-    colorBackground: '#111111',
-    colorText: '#f5f5f5',
-    colorTextSecondary: '#a1a1aa',
-    colorInputBackground: '#252529',
-    colorInputText: '#f5f5f5',
-    colorDanger: '#f87171',
-    colorSuccess: '#4ade80',
-    borderRadius: '0.5rem',
-    fontFamily:
-      "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  },
-  elements: {
-    footer: { display: 'none' },
-    card: {
-      boxShadow: 'none',
-      background: 'transparent',
-      padding: '0',
-      width: '100%',
-      maxWidth: '100%',
-    },
-    cardBox: { boxShadow: 'none', width: '100%', maxWidth: '100%', minWidth: '0' },
-    rootBox: { width: '100%', maxWidth: '100%', minWidth: '0' },
-    headerTitle: { display: 'none' },
-    headerSubtitle: { display: 'none' },
-    formButtonPrimary: {
-      backgroundColor: '#fafafa',
-      color: '#090909',
-      boxShadow: 'none',
-    },
-    socialButtonsBlockButton: {
-      width: '100%',
-      maxWidth: '100%',
-      minWidth: '0',
-      backgroundColor: 'transparent',
-      color: '#e5e5e5',
-      borderColor: '#262626',
-    },
-    formFieldLabel: { color: '#e5e5e5' },
-    formFieldInput: {
-      width: '100%',
-      minWidth: '0',
-      backgroundColor: '#252529',
-      color: '#f5f5f5',
-      borderColor: '#3a3a3a',
-    },
-    dividerLine: { backgroundColor: '#303036' },
-    dividerText: { color: '#a1a1aa' },
-    footerActionText: { color: '#a1a1aa' },
-    footerActionLink: { color: '#fafafa' },
-  },
-} as const;
 
 /** Boot splash shown while the persisted desktop session is being restored. */
 function Splash({ message = 'Loading CUE…' }: { message?: string }) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SignIn, SignUp, useAuth as useClerkAuth } from '@clerk/electron/react';
 import { AuthLayout, type AuthMode } from './AuthLayout';
+import { OAUTH_ACCOUNT_PROMPT } from './clerk-appearance';
 
 /** Clerk's prebuilt components own credential entry, verification and OAuth flows. */
 export function WelcomeScreen() {
@@ -25,7 +26,11 @@ export function WelcomeScreen() {
       clerkTimedOut={clerkTimedOut}
       onReload={() => window.location.reload()}
     >
-      {mode === 'signup' ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
+      {mode === 'signup' ? (
+        <SignUp routing="hash" oidcPrompt={OAUTH_ACCOUNT_PROMPT} />
+      ) : (
+        <SignIn routing="hash" oidcPrompt={OAUTH_ACCOUNT_PROMPT} />
+      )}
     </AuthLayout>
   );
 }

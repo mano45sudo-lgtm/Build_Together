@@ -17,6 +17,7 @@ release/
 .env
 .env.*
 !.env.example
+!.env.*.example
 
 # Editor / OS
 .DS_Store

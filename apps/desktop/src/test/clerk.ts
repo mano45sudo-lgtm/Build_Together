@@ -5,7 +5,7 @@
  */
 
 type ClerkMockHolder = {
-  state: { isLoaded: boolean; isSignedIn: boolean; userId: string | null };
+  state: { isLoaded: boolean; isSignedIn: boolean; userId: string | null; issuesToken: boolean };
 };
 
 function holder(): ClerkMockHolder {
@@ -27,6 +27,11 @@ export function signOutFromClerk(): void {
   const h = holder();
   h.state.isSignedIn = false;
   h.state.userId = null;
+}
+
+/** Simulate Clerk reporting signed-in while `getToken()` keeps returning null. */
+export function setClerkIssuesToken(issues: boolean): void {
+  holder().state.issuesToken = issues;
 }
 
 /** Hold Clerk in its boot state to verify the app still mounts the auth screen. */

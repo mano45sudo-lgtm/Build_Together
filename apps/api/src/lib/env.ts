@@ -1,4 +1,5 @@
 import { validateClerkProductionConfiguration } from './clerk-env.js';
+import { loadDatabaseSettings, type DatabaseSslMode } from './database-config.js';
 
 /**
  * Environment configuration for the API. Loads and validates `process.env` once, at boot,
@@ -17,10 +18,9 @@ function str(key: string, fallback?: string): string | undefined {
 function int(key: string, fallback: number): number {
   const v = process.env[key];
   if (v === undefined || v === '') return fallback;
-  const n = Number.parseInt(v, 10);
-  if (Number.isNaN(n)) {
-    throw new Error(`Invalid number for env var ${key}: "${v}"`);
-  }
+  if (!/^\d+$/.test(v.trim())) throw new Error(`Invalid integer for env var ${key}`);
+  const n = Number(v);
+  if (!Number.isSafeInteger(n)) throw new Error(`Invalid integer for env var ${key}`);
   return n;
 }
 
@@ -39,7 +39,13 @@ export interface Env {
   nodeEnv: string;
   port: number;
   corsOrigin: string;
+  trustProxyHops: number;
   databaseUrl: string;
+  databasePoolMax: number;
+  databaseConnectionTimeoutMillis: number;
+  databaseIdleTimeoutMillis: number;
+  databaseSslMode: DatabaseSslMode;
+  databaseSslRootCert?: string | undefined;
   sessionSecret: string;
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
@@ -82,11 +88,43 @@ function requireEnv(key: string): string {
 }
 
 export function loadEnv(): Env {
+  const nodeEnv = str('NODE_ENV', 'development') as string;
+  const corsOrigin = str('CORS_ORIGIN', 'http://localhost:5173') as string;
+  if (nodeEnv === 'production') {
+    let parsed: URL;
+    try {
+      parsed = new URL(corsOrigin);
+    } catch {
+      throw new Error('CORS_ORIGIN must be an exact HTTPS origin in production');
+    }
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.origin !== corsOrigin ||
+      parsed.hostname.includes('*') ||
+      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
+    ) {
+      throw new Error('CORS_ORIGIN must be an exact public HTTPS origin in production');
+    }
+  }
+  const trustProxyHops = int('TRUST_PROXY_HOPS', nodeEnv === 'production' ? -1 : 0);
+  if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 10) {
+    throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 10');
+  }
+  if (nodeEnv === 'production' && process.env.TRUST_PROXY_HOPS === undefined) {
+    throw new Error('TRUST_PROXY_HOPS must be explicitly configured in production');
+  }
+  const databaseSettings = loadDatabaseSettings(nodeEnv);
   const env: Env = {
-    nodeEnv: str('NODE_ENV', 'development') as string,
+    nodeEnv,
     port: int('PORT', 4000),
-    corsOrigin: str('CORS_ORIGIN', 'http://localhost:5173') as string,
+    corsOrigin,
+    trustProxyHops,
     databaseUrl: requireEnv('DATABASE_URL'),
+    databasePoolMax: databaseSettings.poolMax,
+    databaseConnectionTimeoutMillis: databaseSettings.connectionTimeoutMillis,
+    databaseIdleTimeoutMillis: databaseSettings.idleTimeoutMillis,
+    databaseSslMode: databaseSettings.sslMode,
+    databaseSslRootCert: databaseSettings.sslRootCert,
     sessionSecret: str('SESSION_SECRET', 'dev-only-insecure-secret') as string,
     accessTokenTtlSeconds: int('ACCESS_TOKEN_TTL_SECONDS', 900),
     refreshTokenTtlSeconds: int('REFRESH_TOKEN_TTL_SECONDS', 2592000),
@@ -114,6 +152,17 @@ export function loadEnv(): Env {
     throw new Error('SESSION_SECRET must be set in production');
   }
   validateClerkProductionConfiguration(env);
+  const nexconnValues = [
+    env.nexconnAppKey,
+    env.nexconnAppSecret,
+    env.nexconnPrimaryApiDomain,
+    env.nexconnSecondaryApiDomain,
+  ];
+  if (nexconnValues.some(Boolean) && nexconnValues.some((value) => !value)) {
+    throw new Error(
+      'NEXCONN_APP_KEY, NEXCONN_APP_SECRET, NEXCONN_PRIMARY_API_DOMAIN and NEXCONN_SECONDARY_API_DOMAIN must be configured together',
+    );
+  }
   return env;
 }
 

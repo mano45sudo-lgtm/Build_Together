@@ -17,8 +17,15 @@ vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_mock');
 const clerk = vi.hoisted(() => {
   const noError = async () => ({ error: null });
   return {
-    state: { isLoaded: true, isSignedIn: false, userId: null as string | null },
-    getToken: async () => (clerk.state.isSignedIn ? 'test-jwt' : null),
+    state: {
+      isLoaded: true,
+      isSignedIn: false,
+      userId: null as string | null,
+      // False simulates Clerk reporting signed-in without issuing a session JWT.
+      issuesToken: true,
+    },
+    getToken: async () =>
+      clerk.state.isSignedIn && clerk.state.issuesToken ? `test-jwt-${clerk.state.userId}` : null,
     signOut: async () => {
       clerk.state.isSignedIn = false;
       clerk.state.userId = null;
@@ -57,17 +64,23 @@ vi.mock('@clerk/electron/react', () => ({
     getToken: clerk.getToken,
     signOut: clerk.signOut,
   }),
-  SignIn: () =>
+  // `data-oidc-prompt` surfaces the OAuth prompt prop so tests can assert the account chooser is forced.
+  SignIn: ({ oidcPrompt }: { oidcPrompt?: string }) =>
     createElement(
       'div',
-      null,
+      { 'data-testid': 'clerk-sign-in', 'data-oidc-prompt': oidcPrompt },
       createElement('h1', null, 'Sign in to your account'),
       createElement('input', { 'aria-label': 'Email', type: 'email' }),
       createElement('input', { 'aria-label': 'Password', type: 'password' }),
       createElement('button', { type: 'button' }, 'Continue with Google'),
       createElement('a', { href: '#/sign-up' }, 'Sign up'),
     ),
-  SignUp: () => createElement('div', null, createElement('h1', null, 'Create your account')),
+  SignUp: ({ oidcPrompt }: { oidcPrompt?: string }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'clerk-sign-up', 'data-oidc-prompt': oidcPrompt },
+      createElement('h2', null, 'Clerk sign-up form'),
+    ),
   useSignIn: () => ({ signIn: clerk.signIn, errors: {}, fetchStatus: 'idle' }),
   useSignUp: () => ({ signUp: clerk.signUp, errors: {}, fetchStatus: 'idle' }),
 }));
@@ -80,6 +93,7 @@ beforeEach(() => {
   clerk.state.isLoaded = true;
   clerk.state.isSignedIn = false;
   clerk.state.userId = null;
+  clerk.state.issuesToken = true;
 });
 
 // Vitest does not enable RTL auto-cleanup without globals; unmount between tests explicitly.

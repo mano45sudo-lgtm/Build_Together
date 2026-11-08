@@ -4,6 +4,8 @@ import './lib/load-env-file.js';
 import { createApp } from './app.js';
 import { loadEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
+import { prisma } from './lib/prisma.js';
+import { createGracefulShutdown } from './lib/graceful-shutdown.js';
 
 const env = loadEnv();
 const app = createApp();
@@ -12,11 +14,17 @@ const server = app.listen(env.port, () => {
   logger.info('api listening', { port: env.port, env: env.nodeEnv });
 });
 
+const shutdownGracefully = createGracefulShutdown({
+  server,
+  disconnect: () => prisma.$disconnect(),
+  logger,
+  forceExit: (code) => process.exit(code),
+});
+
 function shutdown(signal: string): void {
-  logger.info('shutting down', { signal });
-  server.close(() => process.exit(0));
-  // Force-exit if connections hang.
-  setTimeout(() => process.exit(1), 10_000).unref();
+  void shutdownGracefully(signal).then((code) => {
+    if (code !== 0) process.exitCode = code;
+  });
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));

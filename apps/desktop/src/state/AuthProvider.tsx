@@ -59,11 +59,29 @@ async function loadSessionWithRetry(
       return await unwrap(bridge.auth.me());
     } catch (error) {
       const delay = API_RETRY_DELAYS_MS[attempt];
-      if (!(error instanceof BridgeError) || error.code !== 'NETWORK_ERROR' || delay === undefined) {
+      if (
+        !(error instanceof BridgeError) ||
+        error.code !== 'NETWORK_ERROR' ||
+        delay === undefined
+      ) {
         throw error;
       }
       await wait(delay);
     }
+  }
+}
+
+/**
+ * Right after an OAuth callback Clerk can report `isSignedIn` a beat before `getToken()` returns a
+ * session JWT. Retry briefly instead of treating that gap as a sign-out, which would strand a signed-in
+ * user on the sign-in screen with nothing left to re-trigger the handoff.
+ */
+async function getTokenWithRetry(getToken: () => Promise<string | null>): Promise<string | null> {
+  for (let attempt = 0; ; attempt += 1) {
+    const token = await getToken();
+    const delay = API_RETRY_DELAYS_MS[attempt];
+    if (token || delay === undefined) return token;
+    await wait(delay);
   }
 }
 
@@ -145,12 +163,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const bridge = requireBridge();
-        const token = await getToken();
+        const token = await getTokenWithRetry(getToken);
         if (cancelled || timedOut) return;
-        // No usable session token (e.g. Clerk still establishing) → stay signed-out rather than fire
-        // unauthenticated API calls. The keepalive / Clerk state change will retry.
+        // Clerk says signed-in but never issued a token: surface a recoverable error (Try again /
+        // Return to sign in) rather than a sign-in form that cannot complete.
         if (!token) {
-          clearSession('signed-out');
+          setAuthError('Your sign-in did not finish. Try again, or return to sign in.');
+          setStatus('error');
           return;
         }
         await unwrap(bridge.auth.syncToken(token));
@@ -198,8 +217,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // its own session (which also clears the encrypted client token Clerk persists on disk).
     if (hasBridge()) await unwrap(requireBridge().auth.syncToken(null)).catch(() => undefined);
     clearSession('signed-out');
-    await clerkSignOut();
-  }, [clerkSignOut, clearSession]);
+    try {
+      await clerkSignOut();
+    } catch (error) {
+      // Clerk still holds the session, so showing the sign-in form would be a lie. Re-run the
+      // handoff so the UI reflects Clerk's real state.
+      console.warn('[desktop] Clerk sign-out failed', error);
+      retryAuth();
+    }
+  }, [clerkSignOut, clearSession, retryAuth]);
 
   const refresh = useCallback(async () => {
     if (!hasBridge()) return;

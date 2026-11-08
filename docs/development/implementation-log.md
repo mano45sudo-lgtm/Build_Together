@@ -1202,3 +1202,269 @@ verified until the authorized Clerk owner supplies real production values and Da
 and the isolated integration database and packaged Windows verification can be run. No production
 settings, credentials, databases, migrations, Railway resources, deployment, commits or pushes
 were touched. Stop here and wait for approval.
+
+## Disposable PostgreSQL migration validation — Phase 3.2
+
+### Scope and isolation
+
+Validated the eight committed Prisma migrations only on new disposable local Docker PostgreSQL
+containers. Existing `bt-postgres` container and volumes were inspected but left untouched; the
+existing container was not used. Process environment had no `DATABASE_URL` or `TEST_DATABASE_URL`;
+the repository `.env` was inspected for key names only and its development URL was not used. Each
+validation target used a dedicated temporary user, fresh database, random host port bound to
+`127.0.0.1` only, and tmpfs storage. No credentials were printed or stored in docs/Git.
+
+Successful final target: PostgreSQL **16.14**, database
+`cue_migration_validation_20261107_125746_7d83a6`, user `cue_migration_validator`, loopback mapping
+`127.0.0.1:59234`. Before migrations, identity matched and public tables plus migration history
+were both zero. The exact eight migration directories were present and unchanged.
+
+### Results
+
+- `pnpm --filter @buildtogether/api exec prisma migrate deploy` — all eight expected migrations
+  applied successfully, in order.
+- Read-only `_prisma_migrations` inspection — exactly eight expected names; all successful, no
+  rolled-back, incomplete or error-log entries.
+- `pnpm --filter @buildtogether/api exec prisma migrate status` — 8 found, no pending migrations;
+  “Database schema is up to date”.
+- `pnpm --filter @buildtogether/api exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` — passed with `No difference detected`.
+- Read-only integrity checks — 21 application tables, 19 enums, 41 foreign keys, 48 unique
+  constraints, 90 indexes, 6 Decision Vault tables, 5 Decision Vault enums, zero migration
+  anomalies. `User.clerkUserId` and `User.passwordHash` were nullable; `Decision.ownerId` was
+  non-null; `Decision.category` default was `GENERAL`.
+- Migration 6's owner backfill executed against zero Decision rows, because the validation DB was
+  empty. Populated-row backfill behavior is therefore unverified. No application records were
+  inserted. API integration tests and API startup were not run.
+- Cleanup removed all three phase-created containers and their associated disposable storage;
+  absence of the successful final container was verified. Existing containers and volumes were
+  untouched.
+
+### Validation-wrapper attempts
+
+The first disposable run applied all migrations and passed history/status checks, but the comparison
+command used Prisma's removed `--to-schema-datamodel` option; that container was removed. The second
+fresh run also applied all migrations, then a PowerShell wrapper expression failed during its
+post-deploy history-name assertion; that container was removed. No migration failed or was edited.
+The third fresh run used the supported `--to-schema` option and completed all validation checks.
+
+No Railway resources, production database, credentials, schema, migration files or application
+source were changed in Phase 3.2. Disposable migration validation is **not production evidence**;
+the production database decision remains **NO-GO** pending backup/restore, production identity,
+TLS/capacity, live readiness/shutdown and integration verification. Proposed backup RPO/RTO values
+remain unapproved.
+
+## Database deployment remediation — Phase 3.1
+
+### Scope and outcome
+
+Implemented the authorized local API/database deployment remediation. No database was created,
+started, contacted, migrated, backed up, restored, reset or modified. The unsafe SQL was moved but
+never executed. No Railway resource or production configuration was changed. No dependency was
+installed.
+
+### Changes
+
+- Moved `apps/api/prisma/tmp_rebaseline_decision_vault.sql` byte-for-byte to
+  `docs/quarantine/sql/tmp_rebaseline_decision_vault.sql`; before/after SHA-256:
+  `5574f219461d83b5e00218d841bd0d9f98cea0f162160666b4626b4b3761d5d8`. Added a quarantine README
+  with origin, hash and explicit execution prohibition. No package/deployment references remain.
+- Added `/api/v1/health/ready` with a bounded `SELECT 1` transaction using the Prisma singleton;
+  failures return a generic 503. Existing `/api/v1/health` remains process liveness.
+- Added a single idempotent SIGINT/SIGTERM shutdown path that closes HTTP, applies an 8-second drain
+  bound, closes remaining connections if needed, then calls Prisma disconnect with a 5-second
+  bound and nonzero failure status.
+- Added validated pool configuration: defaults max 5, connection timeout 5000ms, idle timeout
+  10000ms; ranges max 1–20, connect 100–30000ms, idle 1000–300000ms. Runtime and Prisma CLI use a
+  shared resolver.
+- Added TLS configuration: dev/test default `disable`; production requires `verify-full`; optional
+  CA file path; unsupported client-certificate query parameters are rejected. No insecure TLS
+  bypass is configured. Actual Railway certificate/hostname behavior remains unverified.
+- Kept existing `TEST_DATABASE_URL` isolation guard unchanged and documented validation only on a
+  separately verified disposable database. No integration DB was started or connected.
+- Updated database, cloud deployment, environment, Railway and production security docs. Production
+  database remains NO-GO.
+
+### Verification
+
+Database-free verification completed: API unit tests passed (9 files / 45 tests), API typecheck and
+production build passed, ESLint passed for all changed API source/tests, Prettier check passed, and
+`git diff --check` passed. API integration tests, database readiness against PostgreSQL, Prisma
+migration/status commands, and any DB operations were intentionally not run. The unit suite includes
+readiness success/unavailable/timeout/liveness behavior, pool/TLS validation, and shutdown ordering,
+deduplication, timeout and disconnect failure coverage.
+
+## Database production-readiness audit — Phase 3
+
+### Scope and outcome
+
+Completed the authorized database audit as inspection/documentation only. No Prisma schema,
+migration, source, package script, or SQL file was changed. No database was provisioned or
+connected to; no `migrate status`, migration, SQL, backup, restore, reset, or cleanup command was
+run. No Railway resources were created. No credential values were read or printed.
+
+### Findings
+
+- Confirmed 8 lexicographically ordered PostgreSQL migrations, 21 Prisma models and 19 enums.
+  Reviewed every migration SQL file and the migration lock. The committed migrations contain no
+  table/column drop or row delete. Migration 6 modifies Decision Vault lifecycle enums and
+  backfills required `Decision.ownerId` from `createdById`; migration 8 adds nullable `clerkUserId`
+  and permits null `passwordHash` without changing existing values.
+- Found `apps/api/prisma/tmp_rebaseline_decision_vault.sql` as the only loose `.sql` under
+  `apps/api/prisma`. It drops six Decision Vault tables and five enum types with `CASCADE`, then
+  deletes migration 5's history row. The “empty tables” comment is not verified. No package script
+  or deployment command references it; Prisma itself ignores it because it is outside
+  `migrations/`. Recommended quarantine in a separately authorized cleanup; it was not run or
+  changed.
+- `prisma.config.ts` and runtime both use `DATABASE_URL`. Runtime is a module singleton
+  `PrismaClient` with `PrismaPg({ connectionString })`; no separate pooled/direct URLs, explicit
+  pool caps/timeouts, TLS policy, or shutdown `$disconnect()` exists. API shutdown closes HTTP but
+  does not explicitly drain/disconnect Prisma. `/api/v1/health` is process-only, not database-aware.
+- Proposed, not approved, backup objectives: RPO ≤15 minutes, RTO ≤4 hours, daily backup retention
+  30 days plus monthly copies for 3 months, and monthly isolated restore rehearsals.
+
+### Status
+
+Updated `docs/deployment/DATABASE_MIGRATION_PLAN.md`, `CLOUD_DEPLOYMENT_PLAN.md`, and
+`PRODUCTION_SECURITY_CHECKLIST.md` with the migration table, destructive SQL assessment, first
+deployment process for empty and data-bearing targets, recovery steps, backup proposal, connection
+analysis, blockers and NO-GO decision. No tests or database commands were run; this phase's
+verification was static inspection of source/configuration/SQL and external primary documentation.
+Production DB identity/history, real Railway TLS/connection settings, pool budget, backup/restore,
+and startup behavior remain unverified. **Production database status: NO-GO.** Stop at Phase 3 and
+wait for explicit approval before implementing or provisioning anything.
+
+# Phase 4 — Production configuration & Nexconn readiness
+
+**Status: LOCAL CONFIGURATION HARDENING AND DOCUMENTATION COMPLETE; PRODUCTION NO-GO.**
+
+- Removed the stale `https://api.buildtogether.app` packaged fallback. Electron main now receives
+  `BT_API_BASE_URL` at build time; production mode requires a valid public HTTPS origin. The value is
+  embedded only in the trusted main process and delivered through existing typed `getConfig()` IPC.
+  Browser-only production fallback now fails clearly instead of using localhost.
+- API boot validates a public HTTPS exact-origin `CORS_ORIGIN`, an explicit `TRUST_PROXY_HOPS` value,
+  and all-or-none Nexconn credentials/domains (complete Nexconn config required in production).
+  Express proxy trust uses that explicit count instead of unconditional one-hop trust.
+- Unexpected API errors no longer log raw exception messages, which may contain upstream/database
+  details; logs retain request ID, path and error class while the client receives the existing generic
+  response.
+- Added the full production environment inventory and Phase 4 updates to authentication, Railway,
+  cloud plan and security checklist documentation. Nexconn SDK remains isolated in the API; no SDK
+  methods, credentials, domains, or dashboard configuration were added or guessed.
+- Added focused endpoint validation tests. Build/test/typecheck/lint results are recorded in the
+  Phase 4 completion report. No Railway, production DB, Clerk Dashboard, Nexconn account, cloud
+  deployment, or production installer distribution was accessed.
+
+### Phase 4 verification details
+
+- Desktop tests: **10 files / 57 tests passed**. Desktop TypeScript check passed.
+- API TypeScript check and production TypeScript build passed. Focused API unit selection: **44
+  passed, 1 failed**. The one failing test is `src/lib/clerk.unit.test.ts`'s “uses the Clerk SDK”
+  case: its `verifyToken` mock does not intercept the supported SDK call, so the opaque fixture token
+  is rejected as `INVALID_SESSION`; the other five Clerk adapter cases and eight selected API unit
+  files passed. No live Clerk service was called.
+- Electron production-mode build passed with non-production placeholder values for the API origin and
+  Clerk host. The build without an override failed during configuration because the local `.env`
+  contains a non-HTTPS development API URL, as designed. No Windows installer was built.
+- Changed-file ESLint and Prettier checks passed; `git diff --check` passed. Vite emitted its existing
+  config-loader warning and a RongCloud `path` externalization warning during the renderer build.
+- Production endpoint, credentials, dashboard settings, proxy topology, real data-center domains and
+  cloud behavior remain unverified. The API integration suite was not run; no database or external
+  provider was contacted.
+
+### Clerk unit test mock follow-up
+
+The one Phase 4 API unit failure was a test-isolation issue: `src/test/setup.ts` imports the Clerk
+fixture before the individual test file registers its SDK mock, leaving the real
+`@clerk/backend` module cached. `src/lib/clerk.unit.test.ts` now resets Vitest's module cache before
+each dynamic adapter import, so its `@clerk/backend` mock is applied at the SDK boundary. The
+production Clerk adapter and JWT verification options were not weakened or changed. Verification:
+the focused Clerk adapter suite passed **6/6**, and the complete selected API unit suite passed
+**9 files / 45 tests**. A syntactically isolated local `TEST_DATABASE_URL` was supplied to the test
+harness; these unit tests did not connect to PostgreSQL.
+
+## Authentication page redesign and Google account switching fix — 2026-11-08
+
+**Root cause (account switching).** `@clerk/electron` runs OAuth in the user's **system browser**
+(`shell.openExternal`) and returns through the `app://bundle` deep link. That browser keeps its own
+Google session, and the renderer's `<SignIn>`/`<SignUp>` sent no OIDC `prompt`, so Google silently
+reused whichever account was already active there. Signing out of Cue (which correctly ends the Clerk
+session) could never reach a different Google account. Fix: both components now pass
+`oidcPrompt="select_account"` (`OAUTH_ACCOUNT_PROMPT` in `features/auth/clerk-appearance.ts`), a
+documented Clerk prop that clerk-js forwards as `oidc_prompt` on the sign-in/sign-up create call, so
+Google always shows its account chooser.
+
+**Session handling fixes (`state/AuthProvider.tsx`).**
+- If Clerk reported signed-in but `getToken()` returned null (possible right after the OAuth
+  callback), the provider dropped to `signed-out` and nothing re-ran the handoff, leaving a signed-in
+  user stranded on the sign-in form. It now retries the token briefly (300/700/1400ms) and otherwise
+  shows the existing recoverable error (Try again / Return to sign in).
+- If Clerk `signOut()` rejects, the provider re-runs the handoff instead of showing a sign-in form
+  over a still-live Clerk session.
+- Backend identity resolution (`identity.service.ts`) was reviewed and is correct for account
+  switching: identities are keyed by Clerk user id and never merged by email. No API change.
+
+**UI redesign (`features/auth/AuthLayout.tsx`).** Brought the page back onto DESIGN.md: the ad-hoc
+hard-coded gradient columns and grey orb were replaced by the approved `SoftLighting` +
+`BrandMarkBackground` (Hammer) layers; the meaningless Sun icon was removed; the brand panel now uses
+the real Hammer wordmark with the tagline anchored at the bottom; `h1` is the form heading; a single
+380px-max form column at every width; the brand panel collapses to a wordmark below `lg`. The Clerk
+theme moved to `clerk-appearance.ts` and now uses the current variable names (`colorForeground`,
+`colorMutedForeground`, `colorInput`, `colorInputForeground`, `colorBorder`, `colorRing`). The old
+names (`colorText`, `colorInputBackground`, …) are not in the installed Clerk types and were being
+ignored. Clerk's attribute-qualified rules override `appearance` for control heights and shadows, so
+those (40px controls, 6px radius, hairline borders, white focus ring, near-white primary) live in
+`#auth-form` rules in `styles/index.css`.
+
+**Verification.**
+- Desktop: `tsc --noEmit` passed; Vitest **11 files / 61 tests passed**, including the new
+  `src/test/auth-flow.test.tsx` (4): account chooser forced on sign-in and sign-up; sign out → sign
+  in as a second account re-syncs main with the new token and session; null-token → recoverable
+  error; failed Clerk sign-out → re-sync. ESLint clean; Prettier applied.
+- Rendered the renderer in a browser at 1280×800, 900×700 and 375×812: controls measure 40px, no
+  horizontal scroll, sign-in and sign-up both correct.
+- API suite not run: every API test file stops at setup because `TEST_DATABASE_URL` is unset
+  (pre-existing environment gate, unrelated to this change).
+- **Not verified by hand:** a live Google sign-in with two real accounts in the Electron app. The
+  dev Electron instance could not start because a packaged `Cue.exe` was already running and holds
+  the single-instance lock. Manual check: sign in with Google → sign out from Settings → Continue
+  with Google → Google's account chooser should appear → choose the second account.
+
+## Desktop development / production environment separation — 2026-11-08
+
+**Failure.** `pnpm build` (desktop `electron-vite build`, Vite mode `production`) failed with
+`BT_API_BASE_URL must be a public HTTPS origin…`. Root cause: the setup docs told developers to copy
+`.env.example` to `apps/desktop/.env`, and Vite loads `.env` in **every** mode. The local API URL
+(`http://localhost:4000`), the renderer fallback and the Clerk test key therefore reached the
+production build. The HTTPS check was right to reject it. The same leak would otherwise have
+embedded development values in a production renderer bundle. The URL rule was also written twice
+(inline in `electron.vite.config.ts` and in `electron/main/api-config.ts`).
+
+**Changes.**
+- `electron/main/api-config.ts`: separate `validateDevelopmentApiBaseUrl` (any HTTP(S) origin,
+  default `http://localhost:4000`) and `validateProductionApiBaseUrl` (required, `https:` only,
+  public host). Production was tightened, not loosened: it now also rejects `*.localhost`, the whole
+  127/8 range, private, link-local and CGNAT IPv4, unique-local/link-local IPv6, `0.0.0.0`,
+  `*.local` and `*.internal`. `resolveApiBaseUrlFor(environment, value)` dispatches; the build config
+  and the main process (`config.ts`, runtime re-check) both use it, so the inline duplicate is gone.
+- `electron/build-env.ts` (build-time only): `buildEnvironmentForMode` accepts only `development` /
+  `production`. `assertNoSharedEnvironmentValues` fails a production build when `.env` or
+  `.env.local` sets `BT_API_BASE_URL`, `VITE_API_BASE_URL`, `VITE_CLERK_PUBLISHABLE_KEY` or
+  `VITE_CLERK_FRONTEND_API_HOST`, naming each file and key.
+- Env files: `.env.development.example` and `.env.production.example` added; `.env.example` is now
+  shared guidance only; `.gitignore` un-ignores `.env.*.example`. Process env still overrides files.
+- Scripts: `desktop:build:dev` / `build:dev` (`electron-vite build --mode development`) compiles the
+  bundle against the development configuration. `pnpm build` stays a production build.
+- Docs: README and `docs/engineering/environment-setup.md` setup steps and variable tables, including
+  removal of a stale claim that packaged builds default to a hard-coded production API.
+- API unchanged: it is already split by `NODE_ENV` (local `.env` + Docker PostgreSQL vs. platform env
+  with strict production checks), and its build is environment-independent `tsc`.
+
+**Verification.**
+- Desktop `tsc --noEmit` passed. Electron unit tests: 4 files / 44 tests passed (new validator and
+  build-env cases); full desktop suite run separately below.
+- `pnpm desktop:build:dev` succeeded with the existing local configuration.
+- `pnpm desktop:build` in the current checkout now stops with the shared-file message, because the
+  developer's local `apps/desktop/.env` still holds the three development values. Moving it to
+  `.env.development` is a manual step: agent access to `.env` files is denied by local settings.
+- Not run: a successful production build. It needs a real deployed HTTPS API origin and Clerk
+  production host, which do not exist yet. Nothing was deployed.

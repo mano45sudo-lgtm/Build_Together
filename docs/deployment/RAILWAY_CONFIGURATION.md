@@ -16,7 +16,7 @@ or Cloudflare is part of this plan.
 | Build command      | `pnpm --filter @buildtogether/api prisma:generate && pnpm --filter @buildtogether/api build`                                                                                         | VERIFIED LOCALLY; API build builds shared first                           |
 | Start command      | `pnpm --filter @buildtogether/api start`                                                                                                                                             | VERIFIED LOCALLY through API listen; production infrastructure unverified |
 | Pre-deploy command | `pnpm --filter @buildtogether/api exec prisma migrate deploy`                                                                                                                        | NEEDS USER ACTION; only after backup, review, and staged validation       |
-| Healthcheck path   | Current `/api/v1/health`                                                                                                                                                             | NEEDS IMPLEMENTATION: process-only check, not DB readiness                |
+| Healthcheck path   | Candidate `/api/v1/health/ready`; `/api/v1/health` remains process liveness                                                                                                          | IMPLEMENTED LOCALLY; DB/TLS behavior unverified                           |
 | Port               | Railway injects `PORT`; current API reads it and defaults to 4000 for local dev.                                                                                                     | READY WITH GAP: explicit bind host/range validation not implemented       |
 | Database           | Railway PostgreSQL service on private networking; reference its private `DATABASE_URL` from API service variables                                                                    | NEEDS USER ACTION                                                         |
 | Public API URL     | Railway-generated HTTPS API domain                                                                                                                                                   | NEEDS USER ACTION after service exists                                    |
@@ -57,10 +57,20 @@ local startup do not establish database, Clerk, Nexconn, or deployment readiness
 ## Health/readiness and replicas
 
 Railway healthchecks accept a 2xx response during deployment and do not continuously monitor after
-the deployment is active. Current `/api/v1/health` only reports process uptime; it does not query
-PostgreSQL. Add a bounded `/api/v1/ready` check that proves DB connectivity before configuring it as
-the deployment healthcheck, while keeping liveness lightweight. Start with one API replica. Before
-adding replicas, budget database connections and rate-limit storage across all replicas.
+the deployment is active. `/api/v1/health` reports process liveness; `/api/v1/health/ready` performs
+a bounded `SELECT 1` through the Prisma singleton and returns sanitized 503 when unavailable. The
+candidate path is implemented locally but must not be configured until safe disposable-database and
+target TLS checks pass. Start with one API replica. Pool defaults are max 5 clients/process, 5-second
+connection timeout, and 10-second idle timeout. Set `DATABASE_POOL_MAX` based on total allowed
+connections: maximum pool × maximum API replicas + migration/admin headroom. Shutdown allows 8
+seconds for HTTP drain, closes remaining connections, then gives Prisma disconnect 5 seconds; verify
+Railway's termination window accommodates this.
+
+Production must set `DATABASE_SSL_MODE=verify-full`. This verifies the DB certificate chain and
+hostname. Set `DATABASE_SSL_ROOT_CERT` to an absolute CA file path only if the target's CA is not in
+the runtime trust store. Do not use `rejectUnauthorized=false` or libpq TLS modes such as `require`
+as a substitute. Runtime and Prisma CLI use one resolver, but the exact Railway URL/TLS behavior
+has not been verified against a live database.
 
 ## Variables and release sequence
 
@@ -70,11 +80,10 @@ Nexconn, then generate the Railway HTTPS domain. Keep credentials private. Do no
 pre-deploy migration command against an unknown/existing DB until `DATABASE_MIGRATION_PLAN.md` has
 been followed.
 
-The Windows app currently falls back to the unverified old URL `https://api.buildtogether.app`.
-`BT_API_BASE_URL` is read at runtime, but there is no installer/user configuration mechanism that
-sets it for installed users, and `.env` is excluded from the installer. A supported runtime
-configuration source is still needed before the release operator can set the Railway URL without
-scattering a temporary domain through source files.
+The old unverified URL `https://api.buildtogether.app` was removed. Production desktop builds now
+require `BT_API_BASE_URL` at build time and embed the validated public HTTPS origin in the trusted
+Electron main process. The installed client does not load `.env` at runtime; rebuild the release
+with the verified service origin after that value is known.
 
 ## CI and deployment automation
 
@@ -82,3 +91,17 @@ No `.github/workflows`, Railway config, Dockerfile, or deployment script was fou
 typecheck/lint/API tests/build, and a controlled migration/deploy step only in the separately
 authorized implementation phase. Configure watch paths for API/shared/lockfile changes only after
 confirming the repository's source connection.
+
+# Phase 4 production configuration addendum
+
+No Railway project or service was created. When separately authorized, configure the API variables
+listed in [`PRODUCTION_ENVIRONMENT.md`](./PRODUCTION_ENVIRONMENT.md) in the API service's private
+environment. In particular, provide the real `CORS_ORIGIN`, `TRUST_PROXY_HOPS` matching the actual
+proxy topology, `DATABASE_SSL_MODE=verify-full`, Clerk production values, and all four Nexconn values
+if chat is included. Keep secrets in the platform's secret variable store. The desktop API origin is
+not an API runtime variable: supply `BT_API_BASE_URL=https://<verified-api-origin>` to the controlled
+Windows release build before packaging.
+
+The health endpoints are `/api/v1/health` (liveness) and `/api/v1/health/ready` (database readiness).
+Do not mark Railway configured or production-ready until the actual deployment, TLS, health check,
+private networking, pool budget and migration plan are verified in a separately approved phase.

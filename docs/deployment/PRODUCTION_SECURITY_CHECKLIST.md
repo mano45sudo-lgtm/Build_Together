@@ -51,6 +51,57 @@ in Clerk CSP sources. The live host remains a Clerk-owner input and packaged beh
 Secret values were not inspected or printed. Dashboard, production database, migration, and
 deployment actions remain outside this audit.
 
+## Phase 3.2 disposable PostgreSQL validation
+
+**Local migration validation passed; production database remains NO-GO.** A fresh PostgreSQL 16.14
+Docker container with unique database/user, random loopback-only port and tmpfs storage began empty.
+All eight migrations applied; `_prisma_migrations` recorded exactly the expected eight successful
+entries; `prisma migrate status` reported up to date; Prisma schema diff was empty. Integrity checks
+found 21 application tables, 19 enums, 41 FKs, 48 unique constraints and 90 indexes, with no
+migration anomalies. All six Decision Vault tables and five enums remained. `User.clerkUserId` and
+`User.passwordHash` were nullable; `Decision.ownerId` was required and `Decision.category` defaulted
+to `GENERAL`. The disposable instance was removed and its absence verified. See
+[`DATABASE_MIGRATION_PLAN.md`](./DATABASE_MIGRATION_PLAN.md) for the identity, migration names,
+commands, limitations and cleanup records.
+
+This does not verify populated-row backfill behavior: the database was empty when migration 6 set
+`Decision.ownerId` non-null. No API integration tests, production database, Railway connection,
+backup/restore, live TLS or production readiness test was run. Production remains **NO-GO**.
+
+## Phase 3.1 database deployment remediation
+
+Local API changes are implemented; production database remains **NO-GO**. No DB was provisioned,
+contacted, migrated, reset, or modified. No SQL was executed.
+
+| Control        | Phase 3.1 implementation                                                                                                           | Remaining evidence                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Loose SQL      | Moved to `docs/quarantine/sql/tmp_rebaseline_decision_vault.sql`; SHA-256 recorded in quarantine README. Outside Prisma tree.      | Keep quarantined and never execute; no active script/deploy reference.                             |
+| Readiness      | `/api/v1/health/ready` runs bounded `SELECT 1`, returns sanitized 503; `/api/v1/health` remains liveness.                          | Unit tests and a safe disposable-DB check; configure Railway healthcheck only after DB validation. |
+| Shutdown       | One idempotent SIGINT/SIGTERM path drains HTTP (8s), closes remaining connections on deadline, then disconnects Prisma (5s bound). | Verify within actual platform termination window.                                                  |
+| Pool           | Defaults max 5/process, connect timeout 5s, idle timeout 10s; range-validated env overrides.                                       | Choose replica cap and confirm aggregate connection budget with provider limit.                    |
+| TLS            | Production requires `verify-full`; optional CA file; no disabled certificate verification. CLI/runtime share URL resolver.         | Verify target Railway URL, server certificate/hostname and CA requirements without exposing URL.   |
+| Test DB safety | Existing `TEST_DATABASE_URL` guard remains unchanged; no DB connection or test cleanup performed.                                  | Confirm a separate disposable local DB identity before integration/migration validation.           |
+
+### Phase 3 database production-readiness audit
+
+**Database release status: NO-GO.** Static source review only; no database was contacted or
+changed, no migration status/deploy was run, and the loose SQL was not executed.
+
+| Control                    | Finding                                                                                                                                                                                              | Status / required evidence                                                                                                                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migration inventory        | Eight ordered PostgreSQL migrations; committed SQL has no table/column drops or row deletes. Migration 6 includes Decision Vault enum changes and a populated-row owner backfill.                    | Static audit complete; live schema/history comparison required.                                                                                                                                                                             |
+| Loose SQL safety           | `tmp_rebaseline_decision_vault.sql` drops six Decision Vault tables and five enum types with `CASCADE`, then deletes migration 5's `_prisma_migrations` record. It is now quarantined with checksum. | **BLOCKED:** do not execute; do not restore to Prisma tree.                                                                                                                                                                                 |
+| Existing database state    | No production target or migration history inspected.                                                                                                                                                 | Must prove empty target, or backup/restore an existing target to isolated staging and reconcile exact history/schema first.                                                                                                                 |
+| Migration execution        | Prisma ORM 7 migration SQL files do not contain whole-file transaction wrappers; an interrupted migration can be partially applied. No rollback SQL is provided.                                     | Serialize one pre-deploy job; stop on failure; inspect state on isolated restore; never edit migration history or blindly retry.                                                                                                            |
+| Runtime connection/pooling | `DATABASE_URL` shared by CLI/runtime; pool max 5/process by default with bounded explicit overrides.                                                                                                 | Set replica ceiling and confirm aggregate connection budget; separate a direct CLI URL if a transaction pooler is introduced.                                                                                                               |
+| TLS/private networking     | Production config requires `verify-full`; optional CA file. Actual Railway URL/server TLS behavior remains unknown.                                                                                  | Use same-environment private DB reference; verify certificate and hostname without exposing credentials.                                                                                                                                    |
+| Startup/shutdown           | `/api/v1/health/ready` probes DB with bounded query; process liveness stays `/api/v1/health`; shutdown drains HTTP then disconnects Prisma.                                                          | Unit tests plus safe disposable DB and platform lifecycle verification required.                                                                                                                                                            |
+| Backups and restore        | No provider settings, retention, restore point, or restore rehearsal verified.                                                                                                                       | Approve RPO/RTO; verify automated backup/PITR; restore to isolated target and test monthly/before high-risk migration. Proposed starting RPO ≤15 min, RTO ≤4 hours, daily backups retained 30 days + monthly copies 3 months; not approved. |
+
+Full SQL-level migration inventory, fresh-vs-existing target procedure, failure recovery and backup
+proposal are in [`DATABASE_MIGRATION_PLAN.md`](./DATABASE_MIGRATION_PLAN.md). The database remains
+NO-GO until the listed implementation and environment evidence is complete.
+
 ## Phase 2.1 checks
 
 - API unit: 5 files, 31 tests passed.
@@ -63,3 +114,24 @@ deployment actions remain outside this audit.
   database and verifies `current_database()` before cleanup. No database was connected to or reset.
 - Production desktop build, live Clerk configuration, packaged OAuth, live JWT verification,
   email delivery and production database behavior remain unverified.
+
+# Phase 4 production security addendum
+
+- [ ] API CORS is set to the exact public HTTPS browser origin; it is not `*`.
+- [ ] `TRUST_PROXY_HOPS` matches the deployed proxy chain (never copy a guessed count).
+- [ ] If deploying multiple API replicas, review shared rate limiting: current counters are
+      process-local and do not aggregate across replicas.
+- [ ] `DATABASE_SSL_MODE=verify-full`; pool maximum times replica count stays within the database budget.
+- [ ] Clerk production instance, secret/publishable key pairing, issuer, authorized parties, Native API,
+      allowed origins, Google OAuth and CAPTCHA/abuse controls have been reviewed by the owner.
+- [ ] Packaged Windows build receives the verified API HTTPS origin via `BT_API_BASE_URL`; there is no
+      baked-in default API domain or `.env` dependency.
+- [ ] Nexconn app key/secret and both region-appropriate endpoints are configured together only when
+      production chat is enabled. Callback URL, signature contract, replay window and test delivery are
+      confirmed in the provider account.
+- [ ] Error logs contain request ID and safe error class only; review platform log access/retention.
+- [ ] Backups and isolated restore rehearsal meet the proposed objectives in
+      [`DATABASE_MIGRATION_PLAN.md`](./DATABASE_MIGRATION_PLAN.md).
+
+This checklist is not a production approval. None of the unchecked owner/dashboard/infrastructure
+items were exercised or configured during Phase 4.

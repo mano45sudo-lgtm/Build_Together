@@ -25,6 +25,13 @@ process.env.INTELLIGENCE_RATE_LIMIT ??= '100000';
 // These are NOT real credentials — no provider call is ever made (a fake provider is injected).
 process.env.NEXCONN_APP_KEY ??= 'test-app-key';
 process.env.NEXCONN_APP_SECRET ??= 'test-app-secret';
+process.env.NEXCONN_PRIMARY_API_DOMAIN ??= 'https://primary.test.invalid';
+process.env.NEXCONN_SECONDARY_API_DOMAIN ??= 'https://backup.test.invalid';
+// The env module is imported by the Clerk fixture below, before individual test hooks run.
+process.env.CLERK_SECRET_KEY ??= 'server-secret-placeholder';
+process.env.CLERK_JWT_ISSUER ??= 'https://issuer.example.test';
+process.env.CLERK_AUTHORIZED_PARTIES ??= 'app://bundle';
+process.env.CLERK_JWT_AUDIENCE ??= 'cue-api';
 
 // Clerk (ADR-0006): tests never fabricate a real Clerk JWT nor hit live Clerk. Inject the fake
 // verifier + profile seams (see test/clerk-fixtures.ts) so the API's verification boundary, identity

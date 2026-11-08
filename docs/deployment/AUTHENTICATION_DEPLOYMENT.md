@@ -269,3 +269,21 @@ to be verified by an authorized configuration owner.
 - No Clerk Dashboard settings, credentials, production database, migration, Nexconn integration,
   Railway resource, deployment, commit, or push was touched. Legacy auth schema/data/helpers
   remain in place.
+
+# Phase 4 production configuration addendum
+
+The API continues to verify Clerk session JWTs with the supported Clerk Backend SDK; production
+requires `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER`, and `CLERK_AUTHORIZED_PARTIES`. The secret key is
+needed for first-login verified profile provisioning even if `CLERK_JWT_KEY` is supplied for local
+signature verification. The desktop consumes only `VITE_CLERK_PUBLISHABLE_KEY` and the validated
+frontend host; the API secret is never injected into the desktop build.
+
+`app://bundle` remains the Electron packaged renderer origin used for the callback and Clerk origin
+allowlist. The production Clerk instance, Native API setting, allowed renderer origins, Google OAuth
+provider credentials, and Windows packaged callback have not been checked in the dashboard or with a
+live sign-in. Clerk documents Electron OAuth deep links and requires allowlisted renderer origins;
+review its [Electron OAuth deep-link guide](https://clerk.com/docs/guides/configure/auth-strategies/oauth-deep-links),
+[Electron quickstart](https://clerk.com/docs/electron/getting-started/quickstart), and
+[production deployment guidance](https://clerk.com/docs/guides/development/deployment/production).
+Native API behavior, CAPTCHA/abuse protections, and Google OAuth must be confirmed by the account
+owner before release. No dashboard values were changed.

@@ -4,6 +4,7 @@ import { errorHandler } from './middlewares/error-handler.js';
 import { requestLog } from './middlewares/request-log.js';
 import { env } from './lib/env.js';
 import { uptimeSeconds } from './lib/logger.js';
+import { checkDatabaseReadiness } from './lib/database-readiness.js';
 import { v1Router } from './routes/v1.js';
 
 /**
@@ -16,11 +17,35 @@ import { v1Router } from './routes/v1.js';
  * directly — the trusted main process does (server-side fetch is not browser-CORS-bound) — but we
  * set the headers anyway so a browser hit on the health/dev routes behaves predictably.
  */
-export function createApp(): Express {
+export function createReadinessHandler(probe: () => Promise<void> = checkDatabaseReadiness) {
+  return async (_req: Request, res: Response): Promise<void> => {
+    try {
+      await probe();
+      res.status(200).json({ data: { status: 'ready' }, error: null });
+    } catch {
+      res.status(503).json({
+        data: null,
+        error: { code: 'DATABASE_NOT_READY', message: 'Database is not ready' },
+      });
+    }
+  };
+}
+
+export function createLivenessHandler() {
+  return (_req: Request, res: Response): void => {
+    const body: ApiResponse<HealthReport> = {
+      data: { status: 'ok', service: '@buildtogether/api', uptimeSeconds: uptimeSeconds() },
+      error: null,
+    };
+    res.status(200).json(body);
+  };
+}
+
+export function createApp(options: { databaseReadiness?: () => Promise<void> } = {}): Express {
   const app = express();
 
-  // Behind one reverse proxy in production: let express-rate-limit + req.ip see the real client IP.
-  app.set('trust proxy', 1);
+  // Trust only the explicitly configured proxy hop count; never assume a topology.
+  app.set('trust proxy', env.trustProxyHops);
   app.disable('x-powered-by');
 
   app.use(requestLog);
@@ -45,13 +70,11 @@ export function createApp(): Express {
   app.use(express.json({ limit: '128kb' }));
 
   // Health probe — proves the server, routing, and the shared response envelope work.
-  app.get('/api/v1/health', (_req: Request, res: Response) => {
-    const body: ApiResponse<HealthReport> = {
-      data: { status: 'ok', service: '@buildtogether/api', uptimeSeconds: uptimeSeconds() },
-      error: null,
-    };
-    res.status(200).json(body);
-  });
+  app.get('/api/v1/health', createLivenessHandler());
+
+  // Readiness is separate from liveness so the process can remain alive while the database
+  // is unavailable and the platform can withhold traffic until the pool can answer a probe.
+  app.get('/api/v1/health/ready', createReadinessHandler(options.databaseReadiness));
 
   // Versioned feature surface (auth, users, workspaces, members, invitations).
   app.use('/api/v1', v1Router);

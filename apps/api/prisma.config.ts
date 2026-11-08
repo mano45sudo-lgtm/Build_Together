@@ -1,5 +1,12 @@
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
+import {
+  loadDatabaseSettings,
+  resolveDatabaseConnectionString,
+} from './src/lib/database-config.js';
+
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const databaseSettings = loadDatabaseSettings(nodeEnv);
 
 /**
  * Prisma 7 configuration. With Query Compiler enabled the datasource URL no longer lives in
@@ -12,6 +19,6 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? '',
+    url: resolveDatabaseConnectionString(process.env.DATABASE_URL ?? '', databaseSettings),
   },
 });

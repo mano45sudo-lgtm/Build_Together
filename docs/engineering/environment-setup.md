@@ -22,7 +22,7 @@ Verify: `node -v; pnpm -v; git --version`.
 
 ```bash
 pnpm install                      # install all workspace deps (run at repo root)
-cp apps/desktop/.env.example apps/desktop/.env
+cp apps/desktop/.env.development.example apps/desktop/.env.development
 cp apps/api/.env.example apps/api/.env
 # fill apps/api/.env with local values (see variable table below)
 ```
@@ -34,8 +34,9 @@ pnpm --filter @buildtogether/api dev   # API on :4000
 pnpm desktop:dev                       # Electron + renderer (HMR on :5173)
 ```
 
-Desktop scripts (root): `pnpm desktop:dev` · `pnpm desktop:build` (compile
-main/preload/renderer to `out/`) · `pnpm desktop:package` (Windows x64 NSIS installer,
+Desktop scripts (root): `pnpm desktop:dev` (mode `development`) · `pnpm desktop:build` (mode
+`production`; compile main/preload/renderer to `out/`) · `pnpm desktop:build:dev` (same bundle,
+development configuration) · `pnpm desktop:package` (Windows x64 NSIS installer,
 `apps/desktop/release/Cue Setup.exe`). Run the built bundle without an installer with
 `electron apps/desktop` (set `BT_PROD=1 BT_SMOKE=1` to exercise the production code path).
 
@@ -66,15 +67,32 @@ integration tests run against this database.
 
 ## Environment variables
 
-### `apps/desktop/.env`
+### `apps/desktop/.env.development` and `apps/desktop/.env.production`
 
-| Variable            | Purpose                                                                                                                                                                                                                      |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BT_API_BASE_URL`   | API base resolved by the trusted **main** process and handed to the renderer over IPC. Environment-aware; leave unset for built-in dev (`http://localhost:4000`) / packaged prod (`https://api.buildtogether.app`) defaults. |
-| `VITE_API_BASE_URL` | Renderer **fallback** used only outside Electron (tests / browser preview). Public — embedded in the bundle when set.                                                                                                        |
+The desktop has two configurations, selected by Vite mode. `electron.vite.config.ts` maps the mode
+to an environment (`electron/build-env.ts`) and validates the API origin with the matching rule in
+`electron/main/api-config.ts`. The main process re-applies the same rule at runtime.
 
-> Never point a packaged build at localhost. Nexconn/DB/session secrets stay in `apps/api/.env`
-> and must never appear in a desktop or renderer-reachable variable.
+| Environment | Vite mode     | Commands                                                   | File               |
+| ----------- | ------------- | ---------------------------------------------------------- | ------------------ |
+| Development | `development` | `pnpm dev`, `pnpm desktop:dev`, `pnpm desktop:build:dev`   | `.env.development` |
+| Production  | `production`  | `pnpm build`, `pnpm desktop:build`, `pnpm desktop:package` | `.env.production`  |
+
+| Variable                       | Development                                                   | Production                                             |
+| ------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `BT_API_BASE_URL`              | Optional; any HTTP(S) origin, default `http://localhost:4000` | **Required**; `https://` on a public host, origin only |
+| `VITE_API_BASE_URL`            | Renderer fallback outside Electron (browser dev, tests)       | Not used by the packaged app; leave unset              |
+| `VITE_CLERK_PUBLISHABLE_KEY`   | Clerk development instance (`pk_test_…`)                      | Clerk production instance (`pk_live_…`)                |
+| `VITE_CLERK_FRONTEND_API_HOST` | Optional; derived from the publishable key                    | **Required**; embedded in the CSP                      |
+
+Process environment variables override the files, so CI can inject production values without a
+file on disk. Production rejects `http:`, `localhost`/`*.localhost`, loopback, private, link-local
+and CGNAT addresses, `*.local`/`*.internal`, and any path, query, fragment or credentials.
+
+> Vite loads `.env` and `.env.local` in **every** mode. A production build fails if either file sets
+> one of the four variables above, because those values would leak into the production bundle.
+> Nexconn/DB/session secrets stay in `apps/api/.env` and must never appear in a desktop or
+> renderer-reachable variable.
 
 ### `apps/api/.env` (server-side; secrets live here only)
 

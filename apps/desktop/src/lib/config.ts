@@ -20,7 +20,11 @@ export async function getDesktopConfig(): Promise<DesktopConfig | null> {
 export async function resolveApiBaseUrl(): Promise<string> {
   const config = await getDesktopConfig();
   if (config) return config.apiBaseUrl;
-  return import.meta.env.VITE_API_BASE_URL ?? FALLBACK_API_BASE_URL;
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured) return configured;
+  if (import.meta.env.PROD)
+    throw new Error('VITE_API_BASE_URL is required outside Electron in production');
+  return FALLBACK_API_BASE_URL;
 }
 
 /** True when running inside the Electron desktop shell (preload bridge present). */

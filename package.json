@@ -21,6 +21,7 @@
     "test:e2e": "playwright test",
     "desktop:dev": "pnpm --filter @buildtogether/desktop dev",
     "desktop:build": "pnpm --filter @buildtogether/desktop build",
+    "desktop:build:dev": "pnpm --filter @buildtogether/desktop build:dev",
     "desktop:package": "pnpm --filter @buildtogether/desktop package",
     "audit": "pnpm audit"
   },

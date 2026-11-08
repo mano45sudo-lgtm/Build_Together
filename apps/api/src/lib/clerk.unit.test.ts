@@ -8,6 +8,10 @@ vi.mock('@clerk/backend', () => ({
 
 describe('Clerk session verification adapter', () => {
   beforeEach(() => {
+    // The global setup imports the Clerk fixture (and therefore this adapter) before this file's
+    // @clerk/backend mock is evaluated. Clear that cached adapter so the mock is applied at its
+    // actual SDK boundary on the dynamic import below.
+    vi.resetModules();
     verifyTokenMock.mockReset();
     process.env.CLERK_SECRET_KEY = 'server-secret-placeholder';
     process.env.CLERK_JWT_ISSUER = 'https://issuer.example.test';

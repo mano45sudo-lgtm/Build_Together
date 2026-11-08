@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import type { DesktopConfig } from '@buildtogether/shared';
+import { resolveApiBaseUrlFor } from './api-config';
 
 /**
  * Environment-aware configuration for the desktop app.
@@ -11,12 +12,7 @@ import type { DesktopConfig } from '@buildtogether/shared';
  *   2. Unpackaged development build -> local dev API.
  *   3. Packaged build -> production API (never localhost).
  */
-const DEV_API_BASE_URL = 'http://localhost:4000';
-const PROD_API_BASE_URL = 'https://api.buildtogether.app';
-
-function normalizeBaseUrl(raw: string): string {
-  return raw.trim().replace(/\/+$/, '');
-}
+declare const CUE_API_BASE_URL: string;
 
 export function isDev(): boolean {
   // Packaged builds are always production. For an unpackaged build we default to dev, unless
@@ -26,9 +22,7 @@ export function isDev(): boolean {
 }
 
 export function resolveApiBaseUrl(): string {
-  const explicit = process.env.BT_API_BASE_URL;
-  if (explicit && explicit.trim().length > 0) return normalizeBaseUrl(explicit);
-  return isDev() ? DEV_API_BASE_URL : PROD_API_BASE_URL;
+  return resolveApiBaseUrlFor(isDev() ? 'development' : 'production', CUE_API_BASE_URL);
 }
 
 export function resolveDesktopConfig(): DesktopConfig {
