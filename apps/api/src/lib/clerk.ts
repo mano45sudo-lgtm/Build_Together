@@ -36,10 +36,15 @@ export interface ClerkUserProfile {
 }
 
 export type ClerkSessionVerifier = (token: string) => Promise<VerifiedClerkSession>;
+/** Verifies a user's Clerk API key (used by the read-only MCP integration), returning its owner. */
+export type ClerkApiKeyVerifier = (
+  secret: string,
+) => Promise<{ clerkUserId: string; keyId: string }>;
 export type ClerkProfileFetcher = (clerkUserId: string) => Promise<ClerkUserProfile>;
 
 let verifier: ClerkSessionVerifier | null = null;
 let profileFetcher: ClerkProfileFetcher | null = null;
+let apiKeyVerifier: ClerkApiKeyVerifier | null = null;
 
 /** Networkless JWKS/PEM path is created once; the Secret Key never leaves the server. */
 let client: ReturnType<typeof createClerkClient> | null = null;
@@ -96,6 +101,33 @@ export async function fetchClerkUserProfile(clerkUserId: string): Promise<ClerkU
   return profile;
 }
 
+/**
+ * Verify a Clerk API key with the Backend SDK (`apiKeys.verify`). Only live keys owned by a user
+ * (subject `user_…`) are accepted; organization or machine keys are refused. Fails closed.
+ * shortcut: one Clerk call per request, no caching; add a short TTL cache if MCP traffic grows.
+ */
+export async function verifyClerkApiKey(
+  secret: string,
+): Promise<{ clerkUserId: string; keyId: string }> {
+  const clerk = getClerkClient();
+  if (!clerk) throw unauthorized('AUTH_NOT_CONFIGURED', 'Authentication is not configured');
+  let key: Awaited<ReturnType<typeof clerk.apiKeys.verify>>;
+  try {
+    key = await clerk.apiKeys.verify(secret);
+  } catch {
+    throw unauthorized('INVALID_API_KEY', 'API key is invalid, revoked or expired');
+  }
+  if (key.revoked || key.expired || !key.subject.startsWith('user_')) {
+    throw unauthorized('INVALID_API_KEY', 'API key is invalid, revoked or expired');
+  }
+  return { clerkUserId: key.subject, keyId: key.id };
+}
+
+/** Resolve the API-key verifier (real from env, or the injected test seam). */
+export function getClerkApiKeyVerifier(): ClerkApiKeyVerifier {
+  return apiKeyVerifier ?? verifyClerkApiKey;
+}
+
 /** Resolve the verifier (real from env, or the injected test seam). */
 export function getClerkVerifier(): ClerkSessionVerifier {
   return verifier ?? verifyClerkSessionToken;
@@ -114,7 +146,9 @@ export function getClerkProfileFetcher(): ClerkProfileFetcher {
 export function setClerkSeams(seams: {
   verifier?: ClerkSessionVerifier | null;
   profileFetcher?: ClerkProfileFetcher | null;
+  apiKeyVerifier?: ClerkApiKeyVerifier | null;
 }): void {
   if ('verifier' in seams) verifier = seams.verifier ?? null;
   if ('profileFetcher' in seams) profileFetcher = seams.profileFetcher ?? null;
+  if ('apiKeyVerifier' in seams) apiKeyVerifier = seams.apiKeyVerifier ?? null;
 }

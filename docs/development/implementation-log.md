@@ -1697,3 +1697,25 @@ Owner chose AWS (ECS Fargate, existing domain). Added:
 
 Not run: anything against AWS; Docker image rebuild (Docker Desktop still fails on stale sockets);
 API integration suite; Prisma schema engine with the multi-CA bundle; migrations on PostgreSQL 17.
+
+## Execution intelligence end to end — 2026-11-13
+
+Owner asked to finish the engine (surfaces: Project + My Work; AI "like MCP, any coding model can
+connect").
+
+- Desktop: `window.bt.intelligence` bridge (validated IPC → main API client); project
+  **Intelligence** tab (health + factors, next best actions, blockers, risks, decision changes,
+  dismiss / mark resolved / undo); My Work **Focus** card (blocked, awaiting review,
+  recommendations — overdue/upcoming stay in the existing lanes).
+- API: Clerk API keys (`clerk.apiKeys.verify`) accepted as Bearer tokens **only** on
+  `GET /workspaces`, `/workspaces/:id/projects`, the project overview and personal intelligence;
+  everything else keeps session-JWT-only auth. Revoked/expired/non-user keys → 401
+  `INVALID_API_KEY`; membership checks unchanged.
+- `apps/mcp`: stdio MCP server (`@modelcontextprotocol/sdk` 1.32) with four read-only tools; id
+  inputs restricted to `[A-Za-z0-9_-]` so a model cannot rewrite request paths; https-only API URL
+  except localhost. Dockerfile/.dockerignore include its manifest so the frozen install still
+  matches the lockfile.
+
+Tests: desktop 121, API unit 135, MCP 7 (in-memory client against the real server). Not run: API
+integration suite and Docker image rebuild (Docker Desktop stale sockets); a real Clerk API key
+round-trip (needs API keys enabled on the Clerk instance).

@@ -10,10 +10,11 @@
 !pnpm-workspace.yaml
 !tsconfig.base.json
 
-# API and shared package sources; desktop contributes its manifest only (lockfile consistency).
+# API and shared package sources; desktop and mcp contribute manifests only (lockfile consistency).
 !apps/api/
 !packages/shared/
 !apps/desktop/package.json
+!apps/mcp/package.json
 
 # Never send secrets, local dependencies, build output, tests or tooling caches.
 **/.env
