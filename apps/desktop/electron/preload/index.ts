@@ -154,6 +154,14 @@ const bridge: DesktopBridge = {
     deleteComment: (workspaceId, decisionId, commentId) =>
       invoke(IPC.DECISIONS_DELETE_COMMENT, workspaceId, decisionId, commentId),
   },
+
+  intelligence: {
+    overview: (workspaceId, projectId) => invoke(IPC.INTELLIGENCE_OVERVIEW, workspaceId, projectId),
+    personal: (workspaceId) => invoke(IPC.INTELLIGENCE_PERSONAL, workspaceId),
+    dismiss: (workspaceId, input) => invoke(IPC.INTELLIGENCE_DISMISS, workspaceId, input),
+    undismiss: (workspaceId, kind, dedupKey) =>
+      invoke(IPC.INTELLIGENCE_UNDISMISS, workspaceId, kind, dedupKey),
+  },
 };
 
 contextBridge.exposeInMainWorld('bt', bridge);

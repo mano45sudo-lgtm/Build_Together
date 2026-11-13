@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, FolderKanban, ListTodo, MessageSquare, Scale, Settings2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  FolderKanban,
+  Gauge,
+  ListTodo,
+  MessageSquare,
+  Scale,
+  Settings2,
+} from 'lucide-react';
 import type { MemberSummary, ProjectView, WorkspaceRole } from '@buildtogether/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +18,7 @@ import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/data';
 import { canManageProject } from '../../lib/rbac';
 import { ProjectDecisionsPanel } from '../decisions/ProjectDecisionsPanel';
+import { ProjectIntelligencePanel } from '../intelligence/ProjectIntelligencePanel';
 import { TasksPanel } from '../tasks/TasksPanel';
 import {
   formatProjectDate,
@@ -20,10 +29,11 @@ import {
 } from './projectUtils';
 import { ProjectSettingsPanel } from './ProjectSettingsPanel';
 
-type Tab = 'overview' | 'tasks' | 'decisions' | 'conversations' | 'settings';
+type Tab = 'overview' | 'intelligence' | 'tasks' | 'decisions' | 'conversations' | 'settings';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; icon: typeof FolderKanban }> = [
   { id: 'overview', label: 'Overview', icon: FolderKanban },
+  { id: 'intelligence', label: 'Intelligence', icon: Gauge },
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'decisions', label: 'Decisions', icon: Scale },
   { id: 'conversations', label: 'Conversations', icon: MessageSquare },
@@ -183,6 +193,9 @@ export function ProjectWorkspace({
       </nav>
 
       {tab === 'overview' ? <OverviewPanel project={project} /> : null}
+      {tab === 'intelligence' ? (
+        <ProjectIntelligencePanel workspaceId={workspaceId} projectId={project.id} />
+      ) : null}
       {tab === 'tasks' ? (
         <TasksPanel
           workspaceId={workspaceId}

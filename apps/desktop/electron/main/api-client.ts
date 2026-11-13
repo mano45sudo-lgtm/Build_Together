@@ -40,6 +40,11 @@ import type {
   UpdateWorkspaceInput,
   WorkspaceRole,
   WorkspaceSummary,
+  CreateDismissalInput,
+  InsightKind,
+  IntelligenceDismissalView,
+  PersonalIntelligence,
+  ProjectIntelligenceOverview,
 } from '@buildtogether/shared';
 import {
   DECISION_CATEGORIES,
@@ -533,4 +538,19 @@ export const decisions = {
     ),
   deleteComment: (workspaceId: string, decisionId: string, commentId: string): Promise<null> =>
     request<null>('DELETE', `${ws(workspaceId)}/decisions/${decisionId}/comments/${commentId}`),
+};
+
+// ---- Execution intelligence (Phase 7; computed on read, per-user dismissals only) ----
+export const intelligence = {
+  overview: (workspaceId: string, projectId: string): Promise<ProjectIntelligenceOverview> =>
+    request<ProjectIntelligenceOverview>(
+      'GET',
+      `${ws(workspaceId)}/intelligence/projects/${projectId}/overview`,
+    ),
+  personal: (workspaceId: string): Promise<PersonalIntelligence> =>
+    request<PersonalIntelligence>('GET', `${ws(workspaceId)}/intelligence/personal`),
+  dismiss: (workspaceId: string, input: CreateDismissalInput): Promise<IntelligenceDismissalView> =>
+    request<IntelligenceDismissalView>('POST', `${ws(workspaceId)}/intelligence/dismissals`, input),
+  undismiss: (workspaceId: string, kind: InsightKind, dedupKey: string): Promise<null> =>
+    request<null>('DELETE', `${ws(workspaceId)}/intelligence/dismissals`, { kind, dedupKey }),
 };
