@@ -1,15 +1,14 @@
 @import 'tailwindcss';
 
 /*
- * Cue design tokens — **Calm Light** (macOS-style, Linear/Things polish), with a matching dark
- * appearance that follows the OS (`prefers-color-scheme`), like a native Mac app.
+ * Cue design tokens — **Calm Light** (macOS-style, Linear/Things polish). Light-only by choice:
+ * the owner wants a white app regardless of the OS appearance.
  * White canvas, soft grey sidebar and surfaces, near-black type, hairline borders, gentle shadows,
  * and ONE calm indigo accent for primary actions, selection and focus. Status hues are reserved
  * for meaning.
  *
  * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*, rounded-*)
- * are generated from them; the dark block below only re-points the same variables, so every
- * utility re-skins with the OS appearance. Utility names are stable across both themes.
+ * are generated from them, so re-pointing a token re-skins every surface.
  */
 @theme {
   /* ---- Backgrounds & surfaces ---- */
@@ -51,7 +50,7 @@
   --color-warning-fill-hover: #d97706;
   --color-warning-fill-foreground: #18181b; /* amber is light — dark label for contrast */
 
-  /* ---- Shadow colour for elevation-* (re-pointed in dark) ---- */
+  /* ---- Shadow colour for elevation-* ---- */
   --color-shadow: rgb(16 16 24 / 0.08);
 
   /* ---- Decorative background graphics (Monochrome Precision visual system) ----
@@ -88,33 +87,6 @@
   --duration-base: 180ms;
 }
 
-/* ---- Dark appearance: follows the OS, re-points the same tokens ---- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #0f0f11;
-    --color-sidebar: #0b0b0d;
-    --color-surface-1: #151517;
-    --color-surface-2: #1c1c1f;
-    --color-surface-3: #242428;
-    --color-border-subtle: #1f1f23;
-    --color-border-default: #2a2a2f;
-    --color-border-strong: #3f3f46;
-    --color-primary: #f4f4f5;
-    --color-secondary: #a1a1aa;
-    --color-muted: #8b8b94;
-    --color-disabled: #52525b;
-    --color-accent: #8584f0; /* 6:1 on canvas; dark label on fills */
-    --color-accent-hover: #9594f4;
-    --color-accent-active: #a5a4f7;
-    --color-accent-foreground: #0b0b12;
-    --color-success: #4ade80;
-    --color-warning: #fbbf24;
-    --color-danger: #f87171;
-    --color-info: #8584f0;
-    --color-shadow: rgb(0 0 0 / 0.5);
-  }
-}
-
 /* ---- Elevation (soft shadow + hairline ring) ---- */
 @utility elevation-1 {
   box-shadow:
@@ -136,7 +108,7 @@
 }
 
 html {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {

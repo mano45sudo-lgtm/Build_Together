@@ -11,8 +11,8 @@
 **Calm Light** — a clean, minimal, macOS-style SaaS look (the polish bar of Linear, Things and
 Notion on the Mac). White canvas, a soft grey source-list sidebar, near-black type, hairline
 borders, gentle shadows, and **one calm indigo accent** for the primary action, selection and
-focus. A matching **dark appearance follows the OS** (`prefers-color-scheme`), like a native Mac
-app — there is no in-app toggle. Depth comes from hairlines plus soft, low-alpha shadows. The only
+focus. The app is **light-only** by the owner's choice: it stays white even when the OS is in
+dark mode (`color-scheme: light`, window `backgroundColor` `#FFFFFF`). Depth comes from hairlines plus soft, low-alpha shadows. The only
 other hues are functional status, small and rare.
 
 Quality references (aspirational bar, **never** copied): Linear, Things, Notion, macOS itself.
@@ -21,24 +21,16 @@ Quality references (aspirational bar, **never** copied): Linear, Things, Notion,
 
 Foundational tokens live in the Tailwind v4 `@theme` block in `apps/desktop/src/styles/index.css`.
 Utilities (`bg-canvas`, `text-primary`, `border-border-subtle`, `bg-accent`, `elevation-1`, …) are
-generated from them. The dark appearance is a single `@media (prefers-color-scheme: dark)` block
-that re-points the **same** variables on `:root`, so every utility re-skins with the OS and no
-component needs `dark:` variants (the dialog scrim is the one exception). The Electron window's
-`backgroundColor` follows `nativeTheme` so there is no flash before first paint.
+generated from them, so re-pointing a token re-skins every surface.
 
 ```
-                 Light (default)                       Dark (OS dark appearance)
-Backgrounds:  canvas #FFFFFF  sidebar #F7F7F8       canvas #0F0F11  sidebar #0B0B0D
-              surface-1 #FFFFFF  -2 #F4F4F5  -3 #ECECEE   surface-1 #151517  -2 #1C1C1F  -3 #242428
-Borders:      subtle #EDEDEF  default #E2E2E5  strong #CFCFD4    #1F1F23 / #2A2A2F / #3F3F46
-Text:         primary #18181B  secondary #52525B  muted #6B6B74  disabled #A1A1AA
-                                                    #F4F4F5 / #A1A1AA / #8B8B94 / #52525B
-Accent:       #5B5BD6  hover #4E4EC7  active #4343B3  fg #FFFFFF
-                                                    #8584F0 / #9594F4 / #A5A4F7  fg #0B0B12
-Status:       success #15803D  warning #B45309  danger #DC2626  info = accent
-                                                    #4ADE80 / #FBBF24 / #F87171
+Backgrounds:  canvas #FFFFFF   sidebar #F7F7F8   surface-1 #FFFFFF   surface-2 #F4F4F5   surface-3 #ECECEE
+Borders:      subtle #EDEDEF   default #E2E2E5   strong #CFCFD4
+Text:         primary #18181B  secondary #52525B muted #6B6B74       disabled #A1A1AA
+Accent:       #5B5BD6  hover #4E4EC7  active #4343B3  foreground #FFFFFF
+Status:       success #15803D  warning #B45309   danger #DC2626      info = accent
 Button fills: success #15803D/#166534  danger #DC2626/#B91C1C  warning #F59E0B/#D97706 (fg #18181B)
-Shadow:       --color-shadow rgb(16 16 24 / .08)   rgb(0 0 0 / .5)
+Shadow:       --color-shadow rgb(16 16 24 / .08)
 ```
 
 Rules: the accent is the only interactive hue (primary button, selected/active indicators, focus
@@ -122,7 +114,7 @@ the semantic states.
 
 **Accessibility:** full keyboard operation, always-visible focus ring, `aria-busy` while loading,
 labeled icon controls. Every fill carries an AA label: white on accent 5.4:1, on success 5.0:1, on
-danger 4.8:1; dark label on amber and on the dark-appearance accent.
+danger 4.8:1; dark label on amber.
 
 ## Background graphics
 
@@ -176,7 +168,7 @@ transitions, background motion, or decorative scaling on operational surfaces.
 
 ## Accessibility
 
-WCAG 2.1 AA minimum in both appearances (body ≥4.5:1, large ≥3:1; muted text ≥4.8:1 on
+WCAG 2.1 AA minimum (body ≥4.5:1, large ≥3:1; muted text ≥4.8:1 on
 surface-2). Full keyboard operation with a
 visible focus ring; landmark regions and logical reading order; icons labeled when they carry
 meaning; status never conveyed by color alone; focus managed on route/dialog change.
