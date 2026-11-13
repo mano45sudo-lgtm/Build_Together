@@ -45,7 +45,8 @@ BuildTogether/
 ├── apps/
 │   ├── desktop/        # Electron client: electron/main + electron/preload + React src
 │   │                   #   (@buildtogether/desktop; the renderer replaces the old apps/web)
-│   └── api/            # Express backend + Prisma (@buildtogether/api)
+│   ├── api/            # Express backend + Prisma (@buildtogether/api)
+│   └── mcp/            # read-only MCP server over intelligence (@buildtogether/mcp)
 ├── packages/
 │   └── shared/         # shared TS types & API contracts (@buildtogether/shared)
 ├── e2e/                # Playwright end-to-end specs

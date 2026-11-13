@@ -46,6 +46,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/mcp/package.json apps/mcp/
 
 # 2) Install the API and its workspace dependencies (`...` includes @buildtogether/shared).
 #    Network is required here: the npm registry, Prisma engine binaries for linux/openssl-3, and the

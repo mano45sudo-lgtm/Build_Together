@@ -34,7 +34,8 @@ export function mintClerkToken(input: {
   name: string;
 }): string {
   const fixture: Fixture = { clerkUserId: input.clerkUserId, email: input.email, name: input.name };
-  const token = `clerk_sess_${++counter}_${fixture.clerkUserId}`;
+  // JWT-shaped (three dot parts) like a real Clerk session token; API keys take a different path.
+  const token = `clerk.sess_${++counter}_${fixture.clerkUserId}.test`;
   byToken.set(token, fixture);
   byId.set(fixture.clerkUserId, fixture);
   return token;

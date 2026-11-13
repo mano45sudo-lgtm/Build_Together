@@ -13,16 +13,16 @@ management, and docs tools.
 BuildTogether is delivered in explicitly authorized, phase-gated increments. Each phase ends with
 a completion report and an explicit stop before the next one begins.
 
-| Phase | Scope                                       | State                                                       |
-| ----- | ------------------------------------------- | ----------------------------------------------------------- |
-| 0     | Engineering environment, tooling, docs      | Complete                                                    |
-| 1     | Desktop product foundation (Electron shell) | Complete                                                    |
-| 2     | Identity, workspaces, teams & authorization | Complete                                                    |
-| 3     | Real-time communication (Nexconn)           | Complete                                                    |
-| 4     | Projects & project structure                | Complete                                                    |
-| 5     | Task management, ownership & dependencies   | Complete                                                    |
-| 6     | Decision Vault                              | Complete (Team Pulse not started)                           |
-| 7     | Execution Intelligence Engine               | Deterministic backend foundation complete; AI seam deferred |
+| Phase | Scope                                       | State                                                               |
+| ----- | ------------------------------------------- | ------------------------------------------------------------------- |
+| 0     | Engineering environment, tooling, docs      | Complete                                                            |
+| 1     | Desktop product foundation (Electron shell) | Complete                                                            |
+| 2     | Identity, workspaces, teams & authorization | Complete                                                            |
+| 3     | Real-time communication (Nexconn)           | Complete                                                            |
+| 4     | Projects & project structure                | Complete                                                            |
+| 5     | Task management, ownership & dependencies   | Complete                                                            |
+| 6     | Decision Vault                              | Complete (Team Pulse not started)                                   |
+| 7     | Execution Intelligence Engine               | Complete: engine, desktop surfaces, read-only MCP for any AI client |
 
 The product currently runs end-to-end: authenticated desktop client, real-time messaging,
 project/task/decision workflows, and explainable, deterministic project intelligence. Lint,
@@ -30,9 +30,10 @@ typecheck, builds, **116** API unit tests and **115** desktop tests are green; t
 suite (needs PostgreSQL) has not been re-run since the move to Clerk. Production hosting: AWS
 ([deployment runbook](docs/deployment/AWS_DEPLOYMENT.md)).
 
-Deliberately **not** present (by design, not omission): an AI/LLM provider, notification
-producer/consumer wiring, and desktop surfaces for the intelligence layer — these are authorized
-later increments. See [Roadmap](#roadmap).
+Intelligence shows in each project's **Intelligence** tab and as a **Focus** card in My Work. AI is
+bring-your-own: the read-only [Cue MCP server](apps/mcp/README.md) lets any MCP client (Claude Code,
+Claude Desktop, Cursor) read the same signals with a revocable Clerk API key. Deliberately **not**
+present: a bundled AI/LLM provider and notification producer/consumer wiring. See [Roadmap](#roadmap).
 
 ---
 
@@ -289,7 +290,6 @@ Deferred (authorized later increments):
 - **Notifications** — the first-class, workspace-scoped `Notification` model and migration already
   exist; the producer/consumer wiring that emits and serves them is pending.
 - **Team Pulse** — cross-workspace activity and progress signals.
-- **Desktop intelligence surfaces** — UI over the `/intelligence` API.
 
 Out of scope by design: autonomous agents, automatic task or decision rewriting, auto-assignment,
 productivity surveillance, a generic chatbot, and unrestricted AI access to data.
