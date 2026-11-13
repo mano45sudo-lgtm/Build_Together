@@ -19,7 +19,7 @@ export function NavItem({ id, label, icon: Icon, active, onSelect }: NavItemProp
         'group flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-150 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         active
-          ? 'bg-surface-2 text-primary'
+          ? 'bg-surface-3 text-primary'
           : 'text-secondary hover:bg-surface-1 hover:text-primary',
       )}
       {...(active ? { 'aria-current': 'page' as const } : {})}

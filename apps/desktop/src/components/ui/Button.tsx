@@ -4,11 +4,11 @@ import { cn } from '../../lib/cn';
 import { Spinner } from './Spinner';
 
 /**
- * BuildTogether button system — **Monochrome Precision** (Vercel-inspired). One reusable, token-driven
+ * Cue button system — **Calm Light** (macOS-style). One reusable, token-driven
  * control shared by every action in the renderer. Variants encode *intent*, sizes encode *density*, and
  * every state (hover / active / focus-visible / disabled / loading) is defined once here so no screen
- * re-implements a button. Colour stays reserved: the primary action is a light surface (never a brand
- * hue); the only fills are the semantic success / destructive / warning states.
+ * re-implements a button. Colour stays reserved: the primary action is the one calm accent; the
+ * only other fills are the semantic success / destructive / warning states.
  */
 
 export type ButtonVariant =
@@ -22,16 +22,16 @@ const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium select-none ' +
   // Motion: restrained colour transition only (150ms).
   'transition-[background-color,border-color,color,transform] duration-150 ease-out ' +
-  // Keyboard focus is ALWAYS visible: a white ring sitting on a canvas gap so it reads even around the
-  // near-white primary button. Never rely on the browser default.
+  // Keyboard focus is ALWAYS visible: an accent ring on a canvas gap so it reads even around the
+  // accent-filled primary button. Never rely on the browser default.
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ' +
   // Disabled: non-interactive + muted, but the label stays legible (no pointer events, no click).
   'disabled:pointer-events-none disabled:opacity-50';
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  // Primary action = light surface, near-black text. The single most prominent control on a surface.
+  // Primary action = accent fill. The single most prominent control on a surface.
   primary: 'bg-accent text-accent-foreground hover:bg-accent-hover active:bg-accent-active',
-  // Supporting action = graphite surface with a hairline border.
+  // Supporting action = soft surface with a hairline border.
   secondary:
     'border border-border-default bg-surface-2 text-primary hover:bg-surface-3 active:bg-surface-3',
   // Low-emphasis action that still needs a boundary.

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { IPC } from '@buildtogether/shared';
@@ -74,7 +74,8 @@ export function createWindow(): BrowserWindow {
     minWidth: 940,
     minHeight: 600,
     show: false,
-    backgroundColor: '#0a0a0a',
+    // Match the renderer canvas for the OS appearance so there is no flash before first paint.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f0f11' : '#ffffff',
     title: 'Cue',
     frame: process.platform !== 'win32',
     resizable: true,

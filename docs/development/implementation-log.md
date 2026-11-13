@@ -1719,3 +1719,19 @@ connect").
 Tests: desktop 121, API unit 135, MCP 7 (in-memory client against the real server). Not run: API
 integration suite and Docker image rebuild (Docker Desktop stale sockets); a real Clerk API key
 round-trip (needs API keys enabled on the Clerk instance).
+
+## Calm Light design system — 2026-11-14
+
+Owner asked for a clean, minimal, Mac-style look with a bundled font. The renderer was already
+fully token-driven, so the re-skin is the token file plus a handful of hardcoded values:
+
+- `styles/index.css`: light palette with one indigo accent; dark appearance re-points the same
+  tokens under `prefers-color-scheme: dark` (follows the OS); softer `--color-shadow` elevation;
+  radii 6/10/14px.
+- Inter Variable bundled via `@fontsource-variable/inter` (no CDN; CSP already allows
+  `font-src 'self'`). Window `backgroundColor` follows `nativeTheme`.
+- Components: title bar uses `bg-sidebar`; selected nav item `surface-3`; inputs get an accent
+  focus halo; lighter dialog scrim in light mode.
+
+Checked: auth screen in both appearances in the renderer. Not checked live: signed-in screens
+(needs the owner's sign-in); they use the same tokens/components.

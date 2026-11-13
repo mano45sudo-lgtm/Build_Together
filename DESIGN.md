@@ -8,47 +8,53 @@
 
 ## Visual direction
 
-A **Vercel-inspired monochrome dark UI**, with Linear's information hierarchy and Raycast's
-desktop-native interactions. Deep-black backgrounds, layered charcoal/graphite surfaces, white
-primary type, muted-grey secondary type, thin grey borders, minimal decoration, compact
-navigation, and controlled spacing. Depth comes from **surface contrast and hairlines**, not
-shadows or color. Color is not used for identity — the only hues are functional status, small
-and rare.
+**Calm Light** — a clean, minimal, macOS-style SaaS look (the polish bar of Linear, Things and
+Notion on the Mac). White canvas, a soft grey source-list sidebar, near-black type, hairline
+borders, gentle shadows, and **one calm indigo accent** for the primary action, selection and
+focus. A matching **dark appearance follows the OS** (`prefers-color-scheme`), like a native Mac
+app — there is no in-app toggle. Depth comes from hairlines plus soft, low-alpha shadows. The only
+other hues are functional status, small and rare.
 
-Quality references (aspirational bar, **never** copied): Vercel, Linear, Raycast.
-
-The accent is **not** a brand hue. `--color-accent` is near-white: the primary action is a light
-surface with near-black text (the Vercel button). Anything that previously keyed off a blue
-accent now resolves to white/grey automatically, because the renderer is entirely token-driven.
+Quality references (aspirational bar, **never** copied): Linear, Things, Notion, macOS itself.
 
 ## Color strategy (implemented tokens)
 
-Dark-first monochrome. Foundational tokens live in the Tailwind v4 `@theme` block in
-`apps/desktop/src/styles/index.css`. Utilities (`bg-canvas`, `text-primary`, `border-border-subtle`,
-`bg-accent`, `elevation-1`, …) are generated directly from them, so re-pointing a token re-skins
-every surface.
+Foundational tokens live in the Tailwind v4 `@theme` block in `apps/desktop/src/styles/index.css`.
+Utilities (`bg-canvas`, `text-primary`, `border-border-subtle`, `bg-accent`, `elevation-1`, …) are
+generated from them. The dark appearance is a single `@media (prefers-color-scheme: dark)` block
+that re-points the **same** variables on `:root`, so every utility re-skins with the OS and no
+component needs `dark:` variants (the dialog scrim is the one exception). The Electron window's
+`backgroundColor` follows `nativeTheme` so there is no flash before first paint.
 
 ```
-Backgrounds:  canvas #0A0A0A   sidebar #090909   surface-1 #111111   surface-2 #171717   surface-3 #1C1C1C
-Borders:      subtle #1D1D1D   default #262626   strong #3A3A3A
-Text:         primary #FAFAFA  secondary #A1A1AA muted #71717A       disabled #52525B
-Accent:       #FAFAFA  hover #E4E4E7  active #D4D4D8  foreground #090909  /* primary action = light surface */
-Status:       success #4ADE80  warning #FBBF24   danger #F87171      info #A1A1AA /* neutral, no blue */
-Button fills: success #16A34A/#15803D  danger #DC2626/#B91C1C  warning #F59E0B/#D97706 (fg #171717) /* solid semantic actions */
+                 Light (default)                       Dark (OS dark appearance)
+Backgrounds:  canvas #FFFFFF  sidebar #F7F7F8       canvas #0F0F11  sidebar #0B0B0D
+              surface-1 #FFFFFF  -2 #F4F4F5  -3 #ECECEE   surface-1 #151517  -2 #1C1C1F  -3 #242428
+Borders:      subtle #EDEDEF  default #E2E2E5  strong #CFCFD4    #1F1F23 / #2A2A2F / #3F3F46
+Text:         primary #18181B  secondary #52525B  muted #6B6B74  disabled #A1A1AA
+                                                    #F4F4F5 / #A1A1AA / #8B8B94 / #52525B
+Accent:       #5B5BD6  hover #4E4EC7  active #4343B3  fg #FFFFFF
+                                                    #8584F0 / #9594F4 / #A5A4F7  fg #0B0B12
+Status:       success #15803D  warning #B45309  danger #DC2626  info = accent
+                                                    #4ADE80 / #FBBF24 / #F87171
+Button fills: success #15803D/#166534  danger #DC2626/#B91C1C  warning #F59E0B/#D97706 (fg #18181B)
+Shadow:       --color-shadow rgb(16 16 24 / .08)   rgb(0 0 0 / .5)
 ```
 
-Rules: white + greys for all interaction (hover/focus/active/selection); status colors reserved
-for meaning only (task/project state, destructive actions, presence) and never dominant or the
-sole signal (always paired with a label/icon); no blue/purple/cyan anywhere; no bright cards.
+Rules: the accent is the only interactive hue (primary button, selected/active indicators, focus
+ring, selection); greys carry hover/active surfaces; status colours are reserved for meaning and
+never the sole signal (always paired with a label/icon); no bright cards, no second accent.
 
 ## Typography
 
-One highly-legible UI sans, system-first (`--font-sans`: Inter when available, else system-ui /
-Segoe UI). No font binary is bundled, so the desktop falls back to the platform UI font — no
-unnecessary dependency. Medium-weight (600) headings, regular (400) body, restrained sizes.
-Display is capped at 24px / 600 with -0.02em tracking (`--text-display`); body defaults to
-Tailwind `text-sm` (14px); metadata `text-2xs` (11px) with `tabular-nums` for times/counts.
-Message text uses generous line-height for scanability. Line length in reader contexts is capped.
+**Inter Variable** for all UI text, bundled locally via `@fontsource-variable/inter` (imported in
+`main.tsx`; woff2 served from the app, allowed by CSP `font-src 'self'`) — never a CDN. Fallbacks:
+`-apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, …`. Inter's `cv11` (single-storey
+a) is enabled globally for calmer UI text. Monospace is the platform UI mono (`ui-monospace, SF Mono,
+Menlo, Cascadia Code, Consolas`) — not bundled, since it is only used for a few IDs/codes.
+Semibold (600) headings, regular (400) body. Display is capped at 24px / 600 with -0.02em tracking
+(`--text-display`); body defaults to `text-sm` (14px); metadata `text-2xs` (11px) with
+`tabular-nums` for times/counts.
 
 ## Layout & shell
 
@@ -65,10 +71,9 @@ Desktop-first (target 1280×800, 1440×900, 1600×900, 1920×1080); no mobile-fi
 
 ## Spacing & radius
 
-4px base rhythm. `--radius-md` (6px) for controls, `--radius-lg` (8px) for panels,
-`--radius-xl` (12px) for overlays — restrained and consistent. Elevation is declared once per
-surface (a border **or** `elevation-1..3`, never stacked); elevation pairs a real offset+blur
-shadow with a hairline ring.
+4px base rhythm. `--radius-md` (6px) for controls, `--radius-lg` (10px) for panels/cards,
+`--radius-xl` (14px) for overlays. Elevation is declared once per surface (a border **or**
+`elevation-1..3`, never stacked); each level pairs a soft `--color-shadow` blur with a hairline ring.
 
 ## Component principles
 
@@ -77,9 +82,9 @@ A small, consistent `components/ui` primitive set built once and reused by featu
 Field, Badge, Avatar, Card, Dialog, Dropdown, Tooltip, Skeleton, Spinner, Alert, EmptyState,
 Separator, NavItem. Lucide icons only, monochrome, consistent stroke/size. Every control defines
 default / hover / focus-visible / active / disabled / loading / error; focus is always visible
-(white ring, never colored); disabled uses `--color-disabled`.
+(accent ring); disabled uses `--color-disabled`.
 
-## Button system (Monochrome Precision)
+## Button system
 
 One token-driven control — `components/ui/Button.tsx` — is the source of truth for **every** action
 in the renderer. Variants encode _intent_, sizes encode _density_, and each state is defined once
@@ -88,22 +93,21 @@ there so no screen re-implements a button. Composite controls (`ButtonGroup`, `S
 
 **Variants (intent):**
 
-| Variant       | Surface                                 | Use for                                                         |
-| ------------- | --------------------------------------- | --------------------------------------------------------------- |
-| `primary`     | light fill (`accent`), near-black label | The single most prominent action on a surface (Create, Confirm) |
-| `secondary`   | graphite fill (`surface-2`) + hairline  | A supporting action beside primary                              |
-| `outline`     | transparent + hairline border           | Low-emphasis boundary action — **Cancel / Dismiss** in dialogs  |
-| `ghost`       | transparent, muted until hover          | Inline / contextual / toolbar actions                           |
-| `destructive` | solid red fill (`danger-fill`)          | Irreversible / risky (Delete, Remove member, Reject)            |
-| `success`     | solid green fill (`success-fill`)       | Positive confirmation (Approve, Complete)                       |
-| `warning`     | solid amber fill, dark label            | Caution-requiring confirmation                                  |
+| Variant       | Surface                             | Use for                                                         |
+| ------------- | ----------------------------------- | --------------------------------------------------------------- |
+| `primary`     | indigo fill (`accent`), white label | The single most prominent action on a surface (Create, Confirm) |
+| `secondary`   | soft fill (`surface-2`) + hairline  | A supporting action beside primary                              |
+| `outline`     | transparent + hairline border       | Low-emphasis boundary action — **Cancel / Dismiss** in dialogs  |
+| `ghost`       | transparent, muted until hover      | Inline / contextual / toolbar actions                           |
+| `destructive` | solid red fill (`danger-fill`)      | Irreversible / risky (Delete, Remove member, Reject)            |
+| `success`     | solid green fill (`success-fill`)   | Positive confirmation (Approve, Complete)                       |
+| `warning`     | solid amber fill, dark label        | Caution-requiring confirmation                                  |
 
 **Sizes (density):** `lg` = 44px (`h-11`) · `md` = 40px (`h-10`, default) · `sm` = 32px (`h-8`).
 `IconButton` is square (`size-11`/`size-9`/`size-8`) and always carries an `aria-label`.
 
 **States (all defined once):** default → hover (fill/token shift) → active (deeper fill or
-`translate-y-px` press) → `focus-visible` (offset white ring, readable even on the near-white
-primary) → disabled (`opacity-50`, `pointer-events-none`, label stays legible) → loading.
+`translate-y-px` press) → `focus-visible` (offset accent ring on a canvas gap) → disabled (`opacity-50`, `pointer-events-none`, label stays legible) → loading.
 Loading is a `loading` **prop**, never a hand-injected spinner: it renders the shared `Spinner`,
 blocks repeat activation, sets `aria-busy`, and keeps the label visible. Leading icons are
 suppressed while `loading` so the spinner is the only motion.
@@ -113,17 +117,14 @@ is on the base class; icon-only controls get a ≥32px hit area plus an `aria-la
 
 **Usage rules:** every dialog footer is Outline `Cancel` + Primary `Confirm`; a semantic action uses
 `destructive`/`success`/`warning` only when the action truly destroys, confirms, or warns — never for
-ordinary navigation. Colour stays reserved: primary is a light surface, and the only fills are the
-semantic states.
+ordinary navigation. Colour stays reserved: primary is the one accent, and the only other fills are
+the semantic states.
 
-**Accessibility & known limitation:** full keyboard operation, always-visible focus ring, `aria-busy`
-while loading, labeled icon controls. The pinned brief hexes for the solid semantic fills
-(`#16A34A`, `#DC2626`) sit at ~3.2–4.4:1 against a white label — under AA for small text. This is
-honoured because the brief pins those exact hues, and is mitigated by pairing each fill with a
-label/icon (never colour alone); moving those fills to their 700-shades (`#15803D`, `#B91C1C`) as the
-_resting_ fill would restore AA if the concept is ever loosened.
+**Accessibility:** full keyboard operation, always-visible focus ring, `aria-busy` while loading,
+labeled icon controls. Every fill carries an AA label: white on accent 5.4:1, on success 5.0:1, on
+danger 4.8:1; dark label on amber and on the dark-appearance accent.
 
-## Background graphics (Monochrome Precision)
+## Background graphics
 
 A small, reusable, **decorative-only** layer set lives in `components/visuals/` — kept separate from
 functional `components/ui` primitives. It exists to make the product feel art-directed and premium
@@ -175,13 +176,14 @@ transitions, background motion, or decorative scaling on operational surfaces.
 
 ## Accessibility
 
-WCAG 2.1 AA minimum on dark surfaces (body ≥4.5:1, large ≥3:1). Full keyboard operation with a
+WCAG 2.1 AA minimum in both appearances (body ≥4.5:1, large ≥3:1; muted text ≥4.8:1 on
+surface-2). Full keyboard operation with a
 visible focus ring; landmark regions and logical reading order; icons labeled when they carry
 meaning; status never conveyed by color alone; focus managed on route/dialog change.
 
 ## Visual anti-patterns (explicitly avoided)
 
-Blue/purple/cyan accents; bright or glowing cards; loud or coloured gradients and gradient text (the
+A second accent hue; bright or glowing cards; loud or coloured gradients and gradient text (the
 near-invisible neutral `SoftLighting` above is the sole permitted exception); glassmorphism as
 decoration; nested cards; kicker/eyebrow labels above headings; section numbers; same-size card
 page templates; hard offset glow shadows; decorative motion; fake screens or mock data standing

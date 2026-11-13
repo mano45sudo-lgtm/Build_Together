@@ -65,7 +65,7 @@ export function WindowTitleBar({ platform }: WindowTitleBarProps) {
   return (
     <header
       role="banner"
-      className="window-drag-region relative z-50 flex h-9 shrink-0 items-center border-b border-border-subtle bg-[#0d0d0d] text-primary"
+      className="window-drag-region relative z-50 flex h-9 shrink-0 items-center border-b border-border-subtle bg-sidebar text-primary"
       onDoubleClick={toggleMaximize}
       aria-label="Cue window title bar"
     >

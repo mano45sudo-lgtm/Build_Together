@@ -1,57 +1,58 @@
 @import 'tailwindcss';
 
 /*
- * BuildTogether design token foundation — **Monochrome Dark** (Vercel-inspired).
- * Approved visual direction: deep-black backgrounds, charcoal/graphite surfaces, white
- * primary type, muted-grey secondary type, subtle grey borders, minimal decoration.
- * No blue/purple/cyan accents. `accent` is the light (near-white) primary-action color;
- * status colors (success/warning/danger) are the only hues and are reserved for meaning.
+ * Cue design tokens — **Calm Light** (macOS-style, Linear/Things polish), with a matching dark
+ * appearance that follows the OS (`prefers-color-scheme`), like a native Mac app.
+ * White canvas, soft grey sidebar and surfaces, near-black type, hairline borders, gentle shadows,
+ * and ONE calm indigo accent for primary actions, selection and focus. Status hues are reserved
+ * for meaning.
  *
- * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*,
- * rounded-*) are generated directly from them. Utility names are kept stable so the whole
- * renderer re-skins from this single file.
+ * Tokens are exposed to Tailwind v4 via @theme so utilities (bg-*, text-*, border-*, rounded-*)
+ * are generated from them; the dark block below only re-points the same variables, so every
+ * utility re-skins with the OS appearance. Utility names are stable across both themes.
  */
 @theme {
   /* ---- Backgrounds & surfaces ---- */
-  --color-canvas: #0a0a0a; /* main app background */
-  --color-sidebar: #090909; /* left rail */
-  --color-surface-1: #111111; /* primary surface: panels, cards, dialogs */
-  --color-surface-2: #171717; /* secondary surface: inputs, pills, rows */
-  --color-surface-3: #1c1c1c; /* elevated / hover / active */
+  --color-canvas: #ffffff; /* main app background */
+  --color-sidebar: #f7f7f8; /* left rail + title bar (macOS source-list grey) */
+  --color-surface-1: #ffffff; /* primary surface: panels, cards, dialogs */
+  --color-surface-2: #f4f4f5; /* secondary surface: inputs, pills, rows */
+  --color-surface-3: #ececee; /* hover / active / selected nav */
 
   /* ---- Borders ---- */
-  --color-border-subtle: #1d1d1d; /* hairline dividers */
-  --color-border-default: #262626; /* control outlines, panels */
-  --color-border-strong: #3a3a3a; /* emphasis separators */
+  --color-border-subtle: #ededef; /* hairline dividers */
+  --color-border-default: #e2e2e5; /* control outlines, panels */
+  --color-border-strong: #cfcfd4; /* emphasis separators */
 
   /* ---- Text ---- */
-  --color-primary: #fafafa; /* headings, body */
-  --color-secondary: #a1a1aa; /* secondary copy */
-  --color-muted: #71717a; /* metadata, icons */
-  --color-disabled: #52525b; /* disabled text / controls */
+  --color-primary: #18181b; /* headings, body */
+  --color-secondary: #52525b; /* secondary copy */
+  --color-muted: #6b6b74; /* metadata, icons — 4.8:1 on surface-2 */
+  --color-disabled: #a1a1aa; /* disabled text / controls */
 
-  /* ---- Accent (primary action = light) ---- */
-  --color-accent: #fafafa;
-  --color-accent-hover: #e4e4e7;
-  --color-accent-active: #d4d4d8; /* pressed */
-  --color-accent-foreground: #090909;
+  /* ---- Accent (calm indigo: primary action, selection, focus) ---- */
+  --color-accent: #5b5bd6; /* 5.4:1 with white */
+  --color-accent-hover: #4e4ec7;
+  --color-accent-active: #4343b3; /* pressed */
+  --color-accent-foreground: #ffffff;
 
-  /* ---- Status (the only hues; restrained, meaning-only) ---- */
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --color-info: #a1a1aa; /* neutral — monochrome interface, no blue */
+  /* ---- Status (text/indicators; restrained, meaning-only, AA on light surfaces) ---- */
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #dc2626;
+  --color-info: #5b5bd6;
 
-  /* ---- Button fills (solid semantic actions; white/dark label on a 600 shade) ----
-   * Distinct from the light status tokens above (those are text/indicators on dark).
-   * These are the approved Monochrome-Precision button-system fills. */
-  --color-success-fill: #16a34a;
-  --color-success-fill-hover: #15803d;
+  /* ---- Button fills (solid semantic actions) — white label is AA (>=4.8:1) ---- */
+  --color-success-fill: #15803d;
+  --color-success-fill-hover: #166534;
   --color-danger-fill: #dc2626;
   --color-danger-fill-hover: #b91c1c;
   --color-warning-fill: #f59e0b;
   --color-warning-fill-hover: #d97706;
-  --color-warning-fill-foreground: #171717; /* amber is light — dark label for contrast */
+  --color-warning-fill-foreground: #18181b; /* amber is light — dark label for contrast */
+
+  /* ---- Shadow colour for elevation-* (re-pointed in dark) ---- */
+  --color-shadow: rgb(16 16 24 / 0.08);
 
   /* ---- Decorative background graphics (Monochrome Precision visual system) ----
    * Neutral-only lighting & geometry. Every graphic layer draws from this single restraint
@@ -64,8 +65,11 @@
   --graphic-grid: 32px; /* fine grid cell size */
 
   /* ---- Typography ---- */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+  /* Inter Variable is bundled locally (@fontsource-variable/inter, imported in main.tsx). */
+  --font-sans:
+    'Inter Variable', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', Consolas, monospace;
   --text-2xs: 0.6875rem; /* 11px */
   --text-display: 1.5rem; /* 24px — restrained display */
   --text-display--line-height: 2rem;
@@ -75,8 +79,8 @@
   /* ---- Radius scale (restrained, consistent) ---- */
   --radius-sm: 0.25rem; /* 4px */
   --radius-md: 0.375rem; /* 6px — controls */
-  --radius-lg: 0.5rem; /* 8px — panels */
-  --radius-xl: 0.75rem; /* 12px — overlays */
+  --radius-lg: 0.625rem; /* 10px — panels, cards */
+  --radius-xl: 0.875rem; /* 14px — overlays */
 
   /* ---- Motion ---- */
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -84,27 +88,55 @@
   --duration-base: 180ms;
 }
 
-/* ---- Elevation (surface contrast + hairline, minimal shadow) ---- */
+/* ---- Dark appearance: follows the OS, re-points the same tokens ---- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0f0f11;
+    --color-sidebar: #0b0b0d;
+    --color-surface-1: #151517;
+    --color-surface-2: #1c1c1f;
+    --color-surface-3: #242428;
+    --color-border-subtle: #1f1f23;
+    --color-border-default: #2a2a2f;
+    --color-border-strong: #3f3f46;
+    --color-primary: #f4f4f5;
+    --color-secondary: #a1a1aa;
+    --color-muted: #8b8b94;
+    --color-disabled: #52525b;
+    --color-accent: #8584f0; /* 6:1 on canvas; dark label on fills */
+    --color-accent-hover: #9594f4;
+    --color-accent-active: #a5a4f7;
+    --color-accent-foreground: #0b0b12;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --color-info: #8584f0;
+    --color-shadow: rgb(0 0 0 / 0.5);
+  }
+}
+
+/* ---- Elevation (soft shadow + hairline ring) ---- */
 @utility elevation-1 {
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 2px var(--color-shadow),
     0 0 0 1px var(--color-border-subtle);
 }
 
 @utility elevation-2 {
   box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.5),
+    0 4px 12px var(--color-shadow),
     0 0 0 1px var(--color-border-default);
 }
 
 @utility elevation-3 {
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.6),
+    0 12px 32px var(--color-shadow),
+    0 2px 6px var(--color-shadow),
     0 0 0 1px var(--color-border-default);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
@@ -112,6 +144,7 @@ body {
   background-color: var(--color-canvas);
   color: var(--color-primary);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv11'; /* Inter: single-storey a — calmer UI text */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -127,7 +160,7 @@ body {
 }
 
 /*
- * Keyboard-first, visible focus in monochrome (white ring, never harsh/colored). This is the
+ * Keyboard-first, visible focus (accent ring). This is the
  * default for elements without their own focus style, so it lives in the base layer: unlayered it
  * outranked every utility, re-shaping inputs to 4px corners and stacking a second ring over
  * components' own `focus-visible:` styles.
@@ -145,7 +178,7 @@ body {
   color: var(--color-primary);
 }
 
-/* Restrained monochrome scrollbars. */
+/* Restrained neutral scrollbars. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-default) transparent;
