@@ -1,12 +1,18 @@
 import { validateClerkProductionConfiguration } from './clerk-env.js';
+import {
+  resolveCorsOrigin,
+  resolvePublicAppBaseUrl,
+  validateNexconnApiDomain,
+} from './config-validation.js';
 import { loadDatabaseSettings, type DatabaseSslMode } from './database-config.js';
+import { resolveRuntimeEnvironment, type RuntimeEnvironment } from './runtime-environment.js';
 
 /**
  * Environment configuration for the API. Loads and validates `process.env` once, at boot,
  * and fails fast on missing required values. Secrets live only here (server-side).
  *
- * Phase 2: DATABASE_URL is required (auth + workspaces are backed by PostgreSQL). A test
- * harness may set NODE_ENV=test to relax nothing here — the DB URL is still required.
+ * DATABASE_URL is always required. NODE_ENV must be development (default), test or production
+ * (runtime-environment.ts); every production guard below keys off the validated value.
  */
 
 function str(key: string, fallback?: string): string | undefined {
@@ -36,9 +42,10 @@ function parseCsv(key: string): string[] | undefined {
 }
 
 export interface Env {
-  nodeEnv: string;
+  nodeEnv: RuntimeEnvironment;
   port: number;
-  corsOrigin: string;
+  /** Single allowed browser origin; `undefined` in production means no CORS headers at all. */
+  corsOrigin?: string | undefined;
   trustProxyHops: number;
   databaseUrl: string;
   databasePoolMax: number;
@@ -46,15 +53,13 @@ export interface Env {
   databaseIdleTimeoutMillis: number;
   databaseSslMode: DatabaseSslMode;
   databaseSslRootCert?: string | undefined;
-  sessionSecret: string;
-  accessTokenTtlSeconds: number;
-  refreshTokenTtlSeconds: number;
   invitationTtlSeconds: number;
   authRateLimit: number;
   inviteRateLimit: number;
   chatRateLimit: number;
   intelligenceRateLimit: number;
-  publicAppBaseUrl: string;
+  /** Development invitation-link base; always `undefined` in production (see config-validation). */
+  publicAppBaseUrl?: string | undefined;
   // Clerk (ADR-0006). Authentication is delegated to Clerk; the API only VERIFIES Clerk session
   // tokens and resolves the internal identity. Verification is possible two ways and BOTH are
   // optional in dev/test so the rest of the API boots without Clerk credentials (the `authenticate`
@@ -88,24 +93,8 @@ function requireEnv(key: string): string {
 }
 
 export function loadEnv(): Env {
-  const nodeEnv = str('NODE_ENV', 'development') as string;
-  const corsOrigin = str('CORS_ORIGIN', 'http://localhost:5173') as string;
-  if (nodeEnv === 'production') {
-    let parsed: URL;
-    try {
-      parsed = new URL(corsOrigin);
-    } catch {
-      throw new Error('CORS_ORIGIN must be an exact HTTPS origin in production');
-    }
-    if (
-      parsed.protocol !== 'https:' ||
-      parsed.origin !== corsOrigin ||
-      parsed.hostname.includes('*') ||
-      ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
-    ) {
-      throw new Error('CORS_ORIGIN must be an exact public HTTPS origin in production');
-    }
-  }
+  const nodeEnv = resolveRuntimeEnvironment(process.env.NODE_ENV);
+  const corsOrigin = resolveCorsOrigin(process.env.CORS_ORIGIN, nodeEnv);
   const trustProxyHops = int('TRUST_PROXY_HOPS', nodeEnv === 'production' ? -1 : 0);
   if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 10) {
     throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 10');
@@ -125,15 +114,12 @@ export function loadEnv(): Env {
     databaseIdleTimeoutMillis: databaseSettings.idleTimeoutMillis,
     databaseSslMode: databaseSettings.sslMode,
     databaseSslRootCert: databaseSettings.sslRootCert,
-    sessionSecret: str('SESSION_SECRET', 'dev-only-insecure-secret') as string,
-    accessTokenTtlSeconds: int('ACCESS_TOKEN_TTL_SECONDS', 900),
-    refreshTokenTtlSeconds: int('REFRESH_TOKEN_TTL_SECONDS', 2592000),
     invitationTtlSeconds: int('INVITATION_TTL_SECONDS', 604800),
     authRateLimit: int('AUTH_RATE_LIMIT', 10),
     inviteRateLimit: int('INVITE_RATE_LIMIT', 30),
     chatRateLimit: int('CHAT_RATE_LIMIT', 60),
     intelligenceRateLimit: int('INTELLIGENCE_RATE_LIMIT', 120),
-    publicAppBaseUrl: str('PUBLIC_APP_BASE_URL', 'http://localhost:5173') as string,
+    publicAppBaseUrl: resolvePublicAppBaseUrl(process.env.PUBLIC_APP_BASE_URL, nodeEnv),
     clerkJwtKey: str('CLERK_JWT_KEY'),
     clerkSecretKey: str('CLERK_SECRET_KEY'),
     clerkIssuer: str('CLERK_JWT_ISSUER'),
@@ -141,16 +127,20 @@ export function loadEnv(): Env {
     clerkAudience: str('CLERK_JWT_AUDIENCE'),
     nexconnAppKey: str('NEXCONN_APP_KEY'),
     nexconnAppSecret: str('NEXCONN_APP_SECRET'),
-    nexconnPrimaryApiDomain: str('NEXCONN_PRIMARY_API_DOMAIN'),
-    nexconnSecondaryApiDomain: str('NEXCONN_SECONDARY_API_DOMAIN'),
+    nexconnPrimaryApiDomain: validateNexconnApiDomain(
+      'NEXCONN_PRIMARY_API_DOMAIN',
+      process.env.NEXCONN_PRIMARY_API_DOMAIN,
+      nodeEnv,
+    ),
+    nexconnSecondaryApiDomain: validateNexconnApiDomain(
+      'NEXCONN_SECONDARY_API_DOMAIN',
+      process.env.NEXCONN_SECONDARY_API_DOMAIN,
+      nodeEnv,
+    ),
     nexconnTokenTtlSeconds: int('NEXCONN_TOKEN_TTL_SECONDS', 3600),
     nexconnWebhookMaxSkewMs: int('NEXCONN_WEBHOOK_MAX_SKEW_MS', 300000),
   };
 
-  // Fail closed in production if an insecure default is still in place. Never log values.
-  if (env.nodeEnv === 'production' && env.sessionSecret === 'dev-only-insecure-secret') {
-    throw new Error('SESSION_SECRET must be set in production');
-  }
   validateClerkProductionConfiguration(env);
   const nexconnValues = [
     env.nexconnAppKey,

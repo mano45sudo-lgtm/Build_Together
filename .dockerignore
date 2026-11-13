@@ -27,6 +27,8 @@
 **/coverage
 **/*.log
 **/.DS_Store
+# The one allowed PEM: Amazon's public RDS CA bundle (trust anchors only, no private key).
+!apps/api/certs/rds-global-bundle.pem
 apps/api/src/**/*.test.ts
 apps/api/src/test
 apps/api/src/tests

@@ -3,7 +3,10 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { loadEnv } from 'vite';
-import { resolveClerkFrontendApiHost } from './electron/main/clerk-host';
+import {
+  resolveClerkFrontendApiHost,
+  validateClerkPublishableKeyForBuild,
+} from './electron/main/clerk-host';
 import { resolveApiBaseUrlFor } from './electron/main/api-config';
 import { assertNoSharedEnvironmentValues, buildEnvironmentForMode } from './electron/build-env';
 
@@ -43,6 +46,11 @@ export default defineConfig(({ mode }) => {
 
   // Same validator the main process re-applies at runtime, so a bad endpoint fails the build.
   const apiBaseUrl = resolveApiBaseUrlFor(environment, setting('BT_API_BASE_URL'));
+  // Production builds must carry a production-instance Clerk key (never pk_test_).
+  validateClerkPublishableKeyForBuild(
+    setting('VITE_CLERK_PUBLISHABLE_KEY'),
+    environment === 'development',
+  );
   const clerkFrontendApiHost = resolveClerkFrontendApiHost({
     host: setting('VITE_CLERK_FRONTEND_API_HOST'),
     publishableKey: setting('VITE_CLERK_PUBLISHABLE_KEY'),

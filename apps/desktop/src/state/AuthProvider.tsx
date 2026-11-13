@@ -94,7 +94,10 @@ async function getTokenWithRetry(getToken: () => Promise<string | null>): Promis
 
 function authFailureMessage(error: unknown): string {
   if (error instanceof BridgeError && error.code === 'AUTH_NOT_CONFIGURED') {
-    return 'The API is missing its Clerk server key. Set CLERK_SECRET_KEY in apps/api/.env and restart the API.';
+    // Server configuration details are for developers only; production users get a plain outage note.
+    return import.meta.env.DEV
+      ? 'The API is missing its Clerk server key. Set CLERK_SECRET_KEY in apps/api/.env and restart the API.'
+      : 'Sign-in is temporarily unavailable. Try again in a moment.';
   }
   if (error instanceof BridgeError && error.code === 'NETWORK_ERROR') {
     return 'Cue could not connect to its API. Confirm the API is running, then try again.';

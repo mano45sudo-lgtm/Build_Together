@@ -12,7 +12,7 @@ import * as invitationRepo from '../repositories/invitation.repo.js';
 import * as membershipRepo from '../repositories/membership.repo.js';
 import * as userRepo from '../repositories/user.repo.js';
 import * as workspaceRepo from '../repositories/workspace.repo.js';
-import { buildAcceptUrl, getEmailProvider } from './email.provider.js';
+import { buildAcceptUrl, getEmailProvider, shareableInvite } from './email.provider.js';
 import { normalizeEmail } from '../validation/schemas.js';
 import { refreshInternalIdentityProfile } from './identity.service.js';
 
@@ -59,20 +59,21 @@ export async function createInvitation(
     expiresAt,
   });
 
-  const acceptUrl = buildAcceptUrl(rawToken);
+  const acceptUrl = buildAcceptUrl(rawToken, env.publicAppBaseUrl);
   const provider = getEmailProvider();
   await provider.sendInvitation({
     workspaceName: workspace.workspace.name,
     inviteeEmail: email,
     inviterName: inviter.name,
     role: input.role,
-    acceptUrl,
+    ...(acceptUrl ? { acceptUrl } : {}),
   });
 
   return {
     invitation: toInvitationSummary(row),
-    // Only surface the plaintext link when mail is not actually delivered (development).
-    ...(provider.delivers ? {} : { devInviteLink: acceptUrl }),
+    // Only surface the shareable invite when mail is not actually delivered: the dev link, or in
+    // production (where no link exists) the bare invite code the desktop join field accepts.
+    ...(provider.delivers ? {} : { devInviteLink: shareableInvite(rawToken, acceptUrl) }),
   };
 }
 

@@ -23,11 +23,13 @@ docker run --rm -p 4000:4000 --env-file <private env file> cue-api
 - **Prisma CLI is a runtime dependency** (moved from devDependencies, same 7.10.1). `pnpm deploy
 --prod` would otherwise drop it, and the release step will run `prisma migrate deploy` from this
   image. The image never runs migrations itself. `prisma.config.ts` imports
-  `src/lib/database-config.ts`, so that one source file ships too.
+  `src/lib/database-config.ts` and `src/lib/runtime-environment.ts`, so those two source files ship
+  too.
 - **`--legacy` deploy:** pnpm 10+ otherwise requires `inject-workspace-packages` for the whole
   workspace, which would change how local development links `@buildtogether/shared`.
-- **Native/glibc:** `@node-rs/argon2` resolves `linux-x64-gnu` because install runs on Linux; the
-  Prisma client uses the WASM query compiler; the schema engine is `debian-openssl-3.0.x`.
+- **Native/glibc:** the install runs on Linux, so any native package resolves its glibc build (the
+  unused `@node-rs/argon2` was removed in Batch 0D-A); the Prisma client uses the WASM query
+  compiler; the schema engine is `debian-openssl-3.0.x`.
 - **Build network:** npm registry, Prisma engine downloads, and the Nexconn SDK tarball from
   `codeload.github.com` (pinned commit, built by its `prepare` script). No `git` needed.
 - **Signals:** exec-form `CMD` makes node PID 1, so SIGTERM/SIGINT reach the API's graceful

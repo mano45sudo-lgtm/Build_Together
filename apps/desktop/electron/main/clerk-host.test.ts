@@ -4,6 +4,7 @@ import {
   deriveClerkFrontendApiHost,
   resolveClerkFrontendApiHost,
   validateClerkFrontendApiHost,
+  validateClerkPublishableKeyForBuild,
 } from './clerk-host';
 
 describe('Clerk Frontend API host configuration', () => {
@@ -37,6 +38,36 @@ describe('Clerk Frontend API host configuration', () => {
       frontendApi: 'https://clerk.cue.example',
       frontendSocket: 'wss://clerk.cue.example',
       images: 'https://img.clerk.com',
+    });
+  });
+
+  describe('publishable key policy', () => {
+    const testKey = 'pk_test_' + 'a'.repeat(24);
+    const liveKey = 'pk_live_' + 'b'.repeat(24);
+
+    it('rejects a development-instance key in production builds without echoing it', () => {
+      let message = '';
+      try {
+        validateClerkPublishableKeyForBuild(testKey, false);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toMatch(/development key \(pk_test_\)/);
+      expect(message).not.toContain(testKey);
+    });
+
+    it('requires a key in production builds', () => {
+      expect(() => validateClerkPublishableKeyForBuild(undefined, false)).toThrow(/required/);
+      expect(() => validateClerkPublishableKeyForBuild('   ', false)).toThrow(/required/);
+    });
+
+    it('accepts a production-instance key in production builds', () => {
+      expect(() => validateClerkPublishableKeyForBuild(liveKey, false)).not.toThrow();
+    });
+
+    it('keeps development builds permissive, including no key', () => {
+      expect(() => validateClerkPublishableKeyForBuild(testKey, true)).not.toThrow();
+      expect(() => validateClerkPublishableKeyForBuild(undefined, true)).not.toThrow();
     });
   });
 });

@@ -25,9 +25,10 @@ a completion report and an explicit stop before the next one begins.
 | 7     | Execution Intelligence Engine               | Deterministic backend foundation complete; AI seam deferred |
 
 The product currently runs end-to-end: authenticated desktop client, real-time messaging,
-project/task/decision workflows, and explainable, deterministic project intelligence. Quality
-gates are green across the workspace (**182** backend tests / **11** files and **36** desktop
-tests / **5** files).
+project/task/decision workflows, and explainable, deterministic project intelligence. Lint,
+typecheck, builds, **116** API unit tests and **115** desktop tests are green; the API integration
+suite (needs PostgreSQL) has not been re-run since the move to Clerk. Production hosting: AWS
+([deployment runbook](docs/deployment/AWS_DEPLOYMENT.md)).
 
 Deliberately **not** present (by design, not omission): an AI/LLM provider, notification
 producer/consumer wiring, and desktop surfaces for the intelligence layer — these are authorized
@@ -39,8 +40,8 @@ later increments. See [Roadmap](#roadmap).
 
 ### Identity & teams
 
-- Self-managed accounts with Argon2id password hashing and opaque, server-side hashed sessions
-  (rotation + token-family reuse detection).
+- Sign-in and sign-up through Clerk (email code or password, Google), with custom desktop screens;
+  the API verifies Clerk session tokens and never handles passwords (ADR-0006).
 - Workspaces with OWNER / ADMIN / MEMBER roles, enforced server-side on every request.
 - Secure invitations: random tokens stored only as hashes, expiring, single-use, and bound to the
   target email and role.
@@ -250,8 +251,9 @@ pnpm test            # Vitest (backend + desktop)
 
 - **Backend** integration tests run over real HTTP against a real PostgreSQL database (the API needs
   the `bt-postgres` container running). Unit tests cover the pure intelligence detectors.
-- **Current state:** typecheck, production build, ESLint, and Prettier are all green; the full suite
-  passes at **182 backend** tests and **36 desktop** tests.
+- **Current state:** typecheck, production builds, ESLint and Prettier are green; **116** API unit
+  tests and **115** desktop tests pass. The integration suite needs a `cue_test` database and has
+  not been re-run since the move to Clerk.
 - The project never reports an unrun test as passing and never fakes a screen or a result.
 
 ---

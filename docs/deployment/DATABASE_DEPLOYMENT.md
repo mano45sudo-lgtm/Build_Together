@@ -97,11 +97,67 @@ store. The runtime resolver is unchanged. Production still refuses to start with
    unverified connection, and record its fingerprint.
 3. Make the CA available as a file at `DATABASE_SSL_ROOT_CERT` in **both** the API container and the
    pre-deploy container. **Open gap:** Railway variables are strings and pre-deploy mounts no
-   volumes; the API accepts only a file path. Options (decision required): bake a per-environment CA
-   into the image (not recommended), or add a reviewed mechanism that writes a PEM from a variable to
-   a private temp file before start/migrate.
+   volumes; the API accepts only a file path. Proposed design (not yet implemented): see
+   "CA delivery design" below.
 4. Plan CA rotation (every ≤ 820 days, or on any regeneration): update the trusted CA before or with
    the database restart, or the API and migrations will refuse to connect.
+
+### CA delivery design (Batch 0D-A — proposed, NOT implemented)
+
+**Problem.** `DATABASE_SSL_ROOT_CERT` must be an absolute file path, read by two separate processes:
+the API (`src/index.ts` → `env.ts` → `prisma.ts`) and, in the pre-deploy container, the Prisma CLI
+(`prisma.config.ts`). Railway variables are strings, and the pre-deploy container mounts no
+volumes, so neither process can be handed a file by the platform.
+
+**Options considered.**
+
+| Option                                                      | Verdict                                                                                                   |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Bake the CA into the image                                  | Rejected: makes the image environment-specific; every rotation needs a rebuild; leaks across environments |
+| Railway volume holding the CA                               | Rejected: pre-deploy containers have no volumes, so migrations could not use it                           |
+| Point `DATABASE_SSL_ROOT_CERT` at the database's own volume | Impossible: the API container cannot read another service's volume                                        |
+| Relax to `require` / accept invalid certificates            | Rejected: weakens TLS (forbidden)                                                                         |
+| **PEM in a variable, written to a private file at startup** | **Recommended**                                                                                           |
+
+**Recommended mechanism.**
+
+1. New variable `DATABASE_SSL_ROOT_CERT_PEM` holding the PEM text (one or more `CERTIFICATE` blocks).
+   It is public trust material, not a secret, but integrity-critical: whoever can edit it decides
+   which server is trusted — the same privilege level as `DATABASE_URL`, so keep it in the same
+   restricted variable set.
+2. One small dependency-free module (e.g. `src/lib/database-ca.ts`) called **first** by both entry
+   points — imported at the top of `src/index.ts` (after the `.env` loader) and of `prisma.config.ts`
+   — so both processes derive the file from the same variable:
+   - if `DATABASE_SSL_ROOT_CERT_PEM` is unset, do nothing (existing file-path behaviour unchanged);
+   - if both it and `DATABASE_SSL_ROOT_CERT` are set, refuse to start (ambiguous trust source);
+   - parse every block with `node:crypto` `X509Certificate`; refuse if none parses, if any is
+     expired or not yet valid, or if a block is not a CA certificate; never log the PEM — log only
+     each certificate's SHA-256 fingerprint and expiry;
+   - create a fresh directory with `fs.mkdtemp` under `os.tmpdir()` (mode `0700`, owned by the
+     `node` user), write `ca.pem` with mode `0600`, then set `process.env.DATABASE_SSL_ROOT_CERT` to
+     that absolute path before `env.ts` / `loadDatabaseSettings` run.
+3. The image ships the new module next to `prisma.config.ts` (same Dockerfile copy step as
+   `database-config.ts` and `runtime-environment.ts`).
+
+**Lifetime and cleanup.** The file lives only in the container's ephemeral filesystem; every
+restart and every pre-deploy run recreates it from the variable, so nothing stale survives a
+redeploy. Removing it on graceful shutdown is optional hygiene, not a security boundary.
+
+**Rotation.** Updating the variable on Railway triggers a redeploy, so both containers pick up the
+new CA together. For a planned rotation, set a bundle containing the old and new CA, let it deploy,
+rotate the database certificate, then remove the old CA. Node's TLS accepts a multi-certificate CA
+file; **the Prisma schema engine's handling of a bundle in `sslcert` is NOT VERIFIED** and must be
+tested before relying on overlap. Railway's image regenerates its CA on restart within 30 days of
+expiry, so track the CA expiry (logged fingerprint and date) and rotate deliberately beforehand.
+
+**Tests to add with the implementation.** Unset variable → no-op; both variables set → refused;
+malformed PEM, expired or non-CA certificate → refused; file created with `0600` in a `0700`
+directory; `DATABASE_SSL_ROOT_CERT` points at it; both `env.ts` and `prisma.config.ts` paths resolve
+the same file; the PEM never appears in logs or errors. Then repeat the Batch 0B TLS matrix (correct
+CA passes; no CA, wrong CA and wrong hostname fail) for both the API and the CLI.
+
+**Still external.** The real Railway certificate SANs, the CA export procedure and CA regeneration
+behaviour must be verified against an actual Railway database in a later, approved phase.
 
 ### Live Railway verification plan (requires approval; not executed)
 

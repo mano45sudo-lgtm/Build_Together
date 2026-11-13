@@ -1,4 +1,3 @@
-import { env } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
 
 /**
@@ -18,8 +17,11 @@ export interface InvitationEmail {
   inviteeEmail: string;
   inviterName: string;
   role: string;
-  /** The accept URL, built from PUBLIC_APP_BASE_URL + token (never persisted). */
-  acceptUrl: string;
+  /**
+   * Development accept URL (PUBLIC_APP_BASE_URL + token, never persisted). Absent in production,
+   * where no page or deep link serves `/invite/accept`; a real provider must define its own link.
+   */
+  acceptUrl?: string;
 }
 
 export interface EmailProvider {
@@ -33,10 +35,10 @@ class DevelopmentEmailProvider implements EmailProvider {
   readonly delivers = false;
 
   async sendInvitation(mail: InvitationEmail): Promise<void> {
-    // Log metadata only — never the token-bearing link (it is a live credential) to stdout.
+    // Log metadata only: never the token-bearing link (a live credential) and never the invitee's
+    // email address (personal data). The request id in the request log ties it to the call.
     logger.info('invitation (dev transport, not emailed)', {
       workspace: mail.workspaceName,
-      to: mail.inviteeEmail,
       role: mail.role,
     });
   }
@@ -50,8 +52,19 @@ export function getEmailProvider(): EmailProvider {
   return provider;
 }
 
-/** Build the accept link the client uses. Only ever surfaced to the invitor in dev mode. */
-export function buildAcceptUrl(token: string): string {
-  const base = env.publicAppBaseUrl.replace(/\/+$/, '');
-  return `${base}/invite/accept?token=${encodeURIComponent(token)}`;
+/**
+ * Development accept link (`<PUBLIC_APP_BASE_URL>/invite/accept?token=…`), or `undefined` when no
+ * base applies — always the case in production (config-validation.resolvePublicAppBaseUrl).
+ */
+export function buildAcceptUrl(token: string, base: string | undefined): string | undefined {
+  if (!base) return undefined;
+  return `${base.replace(/\/+$/, '')}/invite/accept?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * What the inviter shares when mail is not delivered: the dev link when one exists, otherwise the
+ * bare invite code. The desktop "Join a workspace" field accepts either (rbac.parseInviteToken).
+ */
+export function shareableInvite(token: string, acceptUrl: string | undefined): string {
+  return acceptUrl ?? token;
 }

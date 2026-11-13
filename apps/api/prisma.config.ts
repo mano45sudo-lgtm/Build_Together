@@ -4,8 +4,10 @@ import {
   loadDatabaseSettings,
   resolveMigrationConnectionString,
 } from './src/lib/database-config.js';
+import { resolveRuntimeEnvironment } from './src/lib/runtime-environment.js';
 
-const nodeEnv = process.env.NODE_ENV ?? 'development';
+// Same NODE_ENV rule as the API runtime: unsupported values are rejected, not treated as dev.
+const nodeEnv = resolveRuntimeEnvironment(process.env.NODE_ENV);
 const databaseSettings = loadDatabaseSettings(nodeEnv);
 
 /**

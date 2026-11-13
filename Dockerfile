@@ -50,7 +50,7 @@ COPY apps/desktop/package.json apps/desktop/
 # 2) Install the API and its workspace dependencies (`...` includes @buildtogether/shared).
 #    Network is required here: the npm registry, Prisma engine binaries for linux/openssl-3, and the
 #    Nexconn SDK, a pinned GitHub tarball (codeload.github.com) built by its `prepare` script.
-#    Native packages (@node-rs/argon2) resolve their linux-x64-gnu build because this runs on Linux.
+#    Any native package resolves its linux-x64-gnu build because this install runs on Linux.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
  && pnpm install --frozen-lockfile --filter "@buildtogether/api..."
@@ -71,15 +71,17 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 # 5) Make sure the compiled output, the shared package's build and the Prisma files are present
 #    (deploy honours ignore files, which exclude build output), drop sources the runtime never
-#    reads, and generate the Prisma client inside the deployed node_modules.
+#    reads (keeping the two TypeScript modules prisma.config.ts imports), and generate the Prisma
+#    client inside the deployed node_modules.
 RUN rm -rf /out/dist /out/node_modules/@buildtogether/shared/dist \
  && cp -r apps/api/dist /out/dist \
  && cp -r packages/shared/dist /out/node_modules/@buildtogether/shared/dist \
  && rm -rf /out/prisma /out/src /out/.env* /out/vitest*.config.ts /out/tsconfig*.json \
  && cp -r apps/api/prisma /out/prisma \
+ && mkdir -p /out/certs && cp apps/api/certs/rds-global-bundle.pem /out/certs/ \
  && cp apps/api/prisma.config.ts /out/prisma.config.ts \
  && mkdir -p /out/src/lib \
- && cp apps/api/src/lib/database-config.ts /out/src/lib/database-config.ts \
+ && cp apps/api/src/lib/database-config.ts apps/api/src/lib/runtime-environment.ts /out/src/lib/ \
  && rm -rf /out/node_modules/@buildtogether/shared/src \
  && cd /out && ./node_modules/.bin/prisma generate
 

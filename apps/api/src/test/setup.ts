@@ -13,7 +13,6 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== 'test') {
 process.env.NODE_ENV = 'test';
 const testDatabase = parseIsolatedTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 process.env.DATABASE_URL = testDatabase.url.toString();
-process.env.SESSION_SECRET ??= 'test-only-insecure-secret';
 // Raise the brute-force ceilings so integration suites run many auth attempts without 429s;
 // the throttle behaviour is covered by a dedicated security test with its own low limit.
 process.env.AUTH_RATE_LIMIT ??= '100000';
