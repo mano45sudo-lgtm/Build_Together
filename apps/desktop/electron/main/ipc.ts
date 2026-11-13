@@ -39,6 +39,8 @@ import type {
   UpdateTaskInput,
   UpdateWorkspaceInput,
   WorkspaceRole,
+  DismissalState,
+  InsightKind,
 } from '@buildtogether/shared';
 import {
   IPC,
@@ -160,6 +162,20 @@ function optEnum<T extends string>(
     throw new ApiRequestError('INVALID_ARGUMENT', `${field} is not a valid value`);
   }
   return value as T;
+}
+
+// Mirrors the server's intelligence schemas (kind/state enums, 1–200 char dedup key).
+const INSIGHT_KINDS: readonly InsightKind[] = ['RECOMMENDATION', 'BLOCKER', 'RISK'];
+const DISMISSAL_STATES: readonly DismissalState[] = ['DISMISSED', 'RESOLVED'];
+function reqInsightKind(value: unknown): InsightKind {
+  const kind = optEnum(value, 'kind', INSIGHT_KINDS);
+  if (!kind) throw new ApiRequestError('INVALID_ARGUMENT', 'kind is required');
+  return kind;
+}
+function reqDedupKey(value: unknown): string {
+  const key = reqStr(value, 'dedupKey');
+  if (key.length > 200) throw new ApiRequestError('INVALID_ARGUMENT', 'dedupKey is too long');
+  return key;
 }
 
 /** Build a CreateProjectInput from a raw IPC object (name required; the rest optional/validated). */
@@ -1103,6 +1119,40 @@ export function registerIpc(): void {
           reqId(workspaceId, 'workspaceId'),
           reqId(decisionId, 'decisionId'),
           reqId(commentId, 'commentId'),
+        ),
+      ),
+  );
+
+  // ---- execution intelligence (Phase 7) ----
+  ipcMain.handle(IPC.INTELLIGENCE_OVERVIEW, (event, workspaceId: unknown, projectId: unknown) =>
+    handle(event, () =>
+      api.intelligence.overview(reqId(workspaceId, 'workspaceId'), reqId(projectId, 'projectId')),
+    ),
+  );
+
+  ipcMain.handle(IPC.INTELLIGENCE_PERSONAL, (event, workspaceId: unknown) =>
+    handle(event, () => api.intelligence.personal(reqId(workspaceId, 'workspaceId'))),
+  );
+
+  ipcMain.handle(IPC.INTELLIGENCE_DISMISS, (event, workspaceId: unknown, input: unknown) =>
+    handle(event, () => {
+      const o = asObject(input);
+      return api.intelligence.dismiss(reqId(workspaceId, 'workspaceId'), {
+        kind: reqInsightKind(o['kind']),
+        dedupKey: reqDedupKey(o['dedupKey']),
+        state: optEnum(o['state'], 'state', DISMISSAL_STATES) ?? 'DISMISSED',
+      });
+    }),
+  );
+
+  ipcMain.handle(
+    IPC.INTELLIGENCE_UNDISMISS,
+    (event, workspaceId: unknown, kind: unknown, dedupKey: unknown) =>
+      handle(event, () =>
+        api.intelligence.undismiss(
+          reqId(workspaceId, 'workspaceId'),
+          reqInsightKind(kind),
+          reqDedupKey(dedupKey),
         ),
       ),
   );

@@ -4,9 +4,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
  * Cryptographic helpers for session/invitation tokens. Uses Node's standard crypto only —
  * this is NOT custom cryptography, just correct use of vetted primitives (ADR-0003).
  *
- * Access/refresh/invitation tokens are high-entropy random strings, so storing a SHA-256
- * digest (fast, deterministic lookup) is appropriate — unlike low-entropy passwords, which
- * go through Argon2id (see lib/password.ts). Raw tokens are returned once and never persisted.
+ * Invitation tokens are high-entropy random strings, so storing a SHA-256 digest (fast,
+ * deterministic lookup) is appropriate. Passwords are owned by Clerk (ADR-0006) and never reach
+ * this API. Raw tokens are returned once and never persisted.
  */
 
 /** URL-safe random token of `bytes` entropy (default 256-bit). */

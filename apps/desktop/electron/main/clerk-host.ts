@@ -48,6 +48,28 @@ export function deriveClerkFrontendApiHost(publishableKey: string): string | und
   }
 }
 
+/**
+ * Publishable-key policy for a desktop build. Clerk issues `pk_test_` keys for Development instances
+ * and `pk_live_` for Production instances, so a production build must carry a key that is present
+ * and not `pk_test_`. Only the documented prefix is checked; the key is never echoed. Development
+ * builds keep accepting test keys, or no key (the app then shows its not-configured state).
+ */
+export function validateClerkPublishableKeyForBuild(
+  publishableKey: string | undefined,
+  development: boolean,
+): void {
+  if (development) return;
+  const key = publishableKey?.trim();
+  if (!key) {
+    throw new Error('VITE_CLERK_PUBLISHABLE_KEY is required for a production desktop build');
+  }
+  if (key.startsWith('pk_test_')) {
+    throw new Error(
+      'VITE_CLERK_PUBLISHABLE_KEY is a Clerk development key (pk_test_); production builds require a production-instance key',
+    );
+  }
+}
+
 export function resolveClerkFrontendApiHost(config: ClerkHostConfig): string | undefined {
   if (config.host?.trim()) {
     return validateClerkFrontendApiHost(config.host, config.development);

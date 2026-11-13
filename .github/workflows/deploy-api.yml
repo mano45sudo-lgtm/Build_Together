@@ -1,0 +1,97 @@
+# Deploy the Cue API to AWS (stack: infra/aws/cue-api.yaml). Manual only, from main.
+# Order: build + push image -> run migrations as a one-off task -> roll out the service -> check readiness.
+# Repository variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   AWS_REGION, AWS_DEPLOY_ROLE_ARN (stack output GitHubDeployRoleArn), CUE_STACK_NAME, CUE_API_URL (stack output ApiUrl)
+name: Deploy API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC to AWS; no long-lived AWS keys in GitHub
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK: ${{ vars.CUE_STACK_NAME }}
+      API_URL: ${{ vars.CUE_API_URL }}
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Read stack outputs
+        run: |
+          out() { aws cloudformation describe-stacks --stack-name "$STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          {
+            echo "REPO=$(out RepositoryUri)"
+            echo "CLUSTER=$(out ClusterName)"
+            echo "MIGRATE_FAMILY=$(out MigrationTaskFamily)"
+            echo "SUBNETS=$(out TaskSubnets)"
+            echo "TASK_SG=$(out TaskSecurityGroup)"
+          } >> "$GITHUB_ENV"
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          docker build -t "$REPO:$TAG" .
+          docker push "$REPO:$TAG"
+
+      - name: Run database migrations (one-off task on the new image)
+        run: |
+          # New migration task revision with the new image; everything else copied unchanged.
+          aws ecs describe-task-definition --task-definition "$MIGRATE_FAMILY" --query taskDefinition \
+            | jq --arg img "$REPO:$TAG" '.containerDefinitions[0].image = $img
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                      .registeredAt, .registeredBy, .deregisteredAt)' > migrate-td.json
+          TD_ARN=$(aws ecs register-task-definition --cli-input-json file://migrate-td.json \
+            --query taskDefinition.taskDefinitionArn --output text)
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$TD_ARN" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$TASK_SG],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Migration exit code: $CODE (logs: CloudWatch /ecs/$STACK, stream prefix migrate)"
+          test "$CODE" = "0"
+
+      - name: Roll out the API (stack parameters ImageTag + DesiredCount only)
+        run: |
+          keep() { printf 'ParameterKey=%s,UsePreviousValue=true ' "$@"; }
+          if aws cloudformation update-stack --stack-name "$STACK" --use-previous-template \
+            --capabilities CAPABILITY_IAM \
+            --parameters ParameterKey=ImageTag,ParameterValue="$TAG" ParameterKey=DesiredCount,ParameterValue=1 \
+              $(keep ApiDomainName DbInstanceClass DbAllocatedStorage ClerkJwtIssuer ClerkAuthorizedParties \
+                     CorsOrigin EnableChat NexconnAppKey NexconnPrimaryApiDomain NexconnSecondaryApiDomain \
+                     GitHubRepository CreateGitHubOidcProvider) 2> update.err; then
+            aws cloudformation wait stack-update-complete --stack-name "$STACK"
+          elif grep -q "No updates are to be performed" update.err; then
+            echo "Already running $TAG"
+          else
+            cat update.err >&2
+            exit 1
+          fi
+
+      - name: Check readiness
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "$API_URL/api/v1/health/ready"; then echo; echo "Ready"; exit 0; fi
+            sleep 15
+          done
+          echo "API did not become ready at $API_URL" >&2
+          exit 1

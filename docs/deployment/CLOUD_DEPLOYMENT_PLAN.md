@@ -7,19 +7,19 @@ or production migration was performed.
 
 ## Verified repository layout
 
-| Item                    | Finding                                                                                                                           | Status                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Workspace               | pnpm workspace rooted at repository root; `apps/*` and `packages/*`                                                               | READY                                       |
-| Package manager         | pnpm `11.8.0` pinned by root `packageManager`; `pnpm-lock.yaml` uses lockfile v9                                                  | READY                                       |
-| Local runtime observed  | Node `v24.13.1`; root only declares `node >=20`, no `.nvmrc`/`.node-version`                                                      | NEEDS IMPLEMENTATION                        |
-| API root                | `apps/api`; Express 5 + TypeScript                                                                                                | READY                                       |
-| Desktop root            | `apps/desktop`; Electron + React/Vite                                                                                             | READY                                       |
-| Shared package          | `packages/shared`; built to ESM JavaScript + declarations with explicit relative `.js` imports and package exports                | PHASE 1 FIX VERIFIED LOCALLY                |
-| API entry/output        | `apps/api/src/index.ts` → `apps/api/dist/index.js` (`tsconfig.build.json`, NodeNext)                                              | BUILD PASSES; runtime imports verified      |
-| Production start script | `pnpm --filter @buildtogether/api start` → `node dist/index.js`                                                                   | STARTED LOCALLY through listen callback     |
-| Prisma                  | Prisma 7; CLI/runtime share `DATABASE_URL`; explicit bounded `PrismaPg` pool and verified TLS mode                                | IMPLEMENTED LOCALLY; live target unverified |
-| Migrations              | 8 ordered PostgreSQL migrations; disposable PostgreSQL 16.14 run applied all and schema diff was empty; dangerous SQL quarantined | LOCAL VALIDATION PASS; production NO-GO     |
-| Deployment automation   | No Railway config, Dockerfile, deploy scripts, or GitHub workflow found                                                           | NEEDS CONFIGURATION                         |
+| Item                  | Finding                                                                                                                           | Status                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Workspace             | pnpm workspace rooted at repository root; `apps/*` and `packages/*`                                                               | READY                                       |
+| Package manager       | pnpm `11.8.0` pinned by root `packageManager`; `pnpm-lock.yaml` uses lockfile v9                                                  | READY                                       |
+| Node runtime          | Node 24 pinned: `.nvmrc`, root and API `engines >=24.0.0 <25`; image `node:24-bookworm-slim`                                      | PINNED (Batch 0A)                           |
+| API root              | `apps/api`; Express 5 + TypeScript                                                                                                | READY                                       |
+| Desktop root          | `apps/desktop`; Electron + React/Vite                                                                                             | READY                                       |
+| Shared package        | `packages/shared`; built to ESM JavaScript + declarations with explicit relative `.js` imports and package exports                | PHASE 1 FIX VERIFIED LOCALLY                |
+| API entry/output      | `apps/api/src/index.ts` → `apps/api/dist/index.js` (`tsconfig.build.json`, NodeNext)                                              | BUILD PASSES; runtime imports verified      |
+| Production start      | Docker image `CMD ["node", "dist/index.js"]` (WORKDIR `/app`; no pnpm in the runtime image)                                       | VERIFIED IN LOCAL CONTAINER                 |
+| Prisma                | Prisma 7; CLI/runtime share `DATABASE_URL`; explicit bounded `PrismaPg` pool and verified TLS mode                                | IMPLEMENTED LOCALLY; live target unverified |
+| Migrations            | 8 ordered PostgreSQL migrations; disposable PostgreSQL 16.14 run applied all and schema diff was empty; dangerous SQL quarantined | LOCAL VALIDATION PASS; production NO-GO     |
+| Deployment automation | Root `Dockerfile` + `.dockerignore`; pre-deploy `npm run db:migrate:deploy`; no CI workflow yet                                   | IMAGE READY; CI NEEDS CONFIGURATION         |
 
 ## Readiness summary
 
@@ -140,12 +140,10 @@ API readiness/startup remain unverified.
 
 ## Remaining deployment work (separate authorization required)
 
-1. Validate a clean Railway/Railpack workspace install and build, then pin a supported Node LTS
-   version and verify it in that environment.
+1. Build the root `Dockerfile` on Railway (repository root as context) and verify the image there.
 2. Choose the maximum API replica count and ensure pool maximum × replicas plus migration/admin
    connections stays within the actual database limit.
-3. Pin a supported Node LTS version, keep the workspace lockfile install reproducible, and verify
-   the Railway build/install/start commands in a clean environment.
+3. Keep the frozen-lockfile Docker install reproducible and pin the base image by digest.
 4. Supply the actual production Clerk issuer, authorized parties, API Secret Key, desktop
    publishable key, and Frontend API hostname through their intended secure configuration
    channels; verify Dashboard settings and packaged Windows email/Google OAuth flows. No values
@@ -173,7 +171,7 @@ deployment.
 build-time API endpoint and production builds reject a missing, non-HTTPS, local, or non-origin URL;
 the previous `https://api.buildtogether.app` fallback was not verified and has been removed. The
 renderer still obtains desktop API configuration only over the typed preload bridge. API production
-startup requires explicit exact HTTPS `CORS_ORIGIN`, explicit bounded `TRUST_PROXY_HOPS`, the existing
+startup requires a supported `NODE_ENV`, a valid optional `CORS_ORIGIN` (Batch 0D-A), explicit bounded `TRUST_PROXY_HOPS`, the existing
 database TLS settings, and complete Nexconn configuration when the chat provider is enabled. With no
 Nexconn values, chat remains optional and fails closed with 503; a partially configured group is a
 startup error to prevent silent misconfiguration.

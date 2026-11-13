@@ -75,6 +75,9 @@ export function InviteMemberDialog({
     }
   };
 
+  // Development returns an accept link; production (no link exists) returns the bare invite code.
+  const inviteKind = result?.devInviteLink?.includes('://') ? 'link' : 'code';
+
   const copy = async () => {
     if (!result?.devInviteLink) return;
     try {
@@ -82,7 +85,7 @@ export function InviteMemberDialog({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      setBanner('Copy failed — select the link and copy it manually.');
+      setBanner(`Copy failed — select the ${inviteKind} and copy it manually.`);
     }
   };
 
@@ -125,10 +128,11 @@ export function InviteMemberDialog({
 
         {result ? (
           result.devInviteLink ? (
-            <Alert variant="info" title="Development invite link">
+            <Alert variant="info" title={`Share this invite ${inviteKind}`}>
               <p className="mb-2">
-                No email service is configured, so this link was <strong>not</strong> sent — share
-                it with {result.invitation.email} yourself. It expires with the invitation.
+                No email service is configured, so this {inviteKind} was <strong>not</strong> sent —
+                share it with {result.invitation.email} yourself. They paste it under “Have an
+                invitation?”. It expires with the invitation.
               </p>
               <div className="flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded bg-surface-2 px-2 py-1 font-mono text-2xs text-secondary">
@@ -138,7 +142,7 @@ export function InviteMemberDialog({
                   size="sm"
                   variant="secondary"
                   onClick={() => void copy()}
-                  aria-label="Copy invite link"
+                  aria-label={`Copy invite ${inviteKind}`}
                 >
                   {copied ? (
                     <Check className="size-3.5" aria-hidden="true" />

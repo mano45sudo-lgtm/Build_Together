@@ -16,4 +16,12 @@ export function validateClerkProductionConfiguration(config: ClerkProductionConf
   if (missing.length) {
     throw new Error(`Missing required production Clerk configuration: ${missing.join(', ')}`);
   }
+  // Clerk issues `sk_test_` keys for Development instances and `sk_live_` for Production instances.
+  // A development instance must never back production; only the documented prefix is checked —
+  // the key itself is never parsed, logged or echoed.
+  if (config.clerkSecretKey?.startsWith('sk_test_')) {
+    throw new Error(
+      'CLERK_SECRET_KEY is a Clerk development key (sk_test_); production requires a production-instance key',
+    );
+  }
 }

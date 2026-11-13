@@ -7,8 +7,16 @@ import { logger } from '../lib/logger.js';
  * access log so a failure is traceable end-to-end), then emits one structured access-log line
  * per response. Only non-secret metadata is logged — never bodies, tokens, or Authorization.
  */
+
+/** Client-supplied ids are reused only if short and plain (UUIDs, trace ids); otherwise replaced. */
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+export function resolveRequestId(supplied: string | undefined): string {
+  return supplied !== undefined && REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
+}
+
 export function requestLog(req: Request, res: Response, next: NextFunction): void {
-  const requestId = req.header('x-request-id') ?? randomUUID();
+  const requestId = resolveRequestId(req.header('x-request-id'));
   req.requestId = requestId;
   res.setHeader('x-request-id', requestId);
 

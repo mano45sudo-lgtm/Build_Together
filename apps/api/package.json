@@ -23,7 +23,6 @@
     "@buildtogether/shared": "workspace:*",
     "@clerk/backend": "^3.26.6",
     "@nexconn/server-sdk": "github:NexconnAI-Dev/nexconn-server-sdk-node#v0.1.2",
-    "@node-rs/argon2": "^2.2.2",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "dotenv": "^18.0.9",

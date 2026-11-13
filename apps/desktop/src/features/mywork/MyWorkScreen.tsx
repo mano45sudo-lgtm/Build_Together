@@ -15,6 +15,7 @@ import { api } from '../../lib/data';
 import { useAuth } from '../../state/AuthProvider';
 import { NoWorkspace } from '../workspace/NoWorkspace';
 import { TaskDetail } from '../tasks/TaskDetail';
+import { FocusCard } from '../intelligence/FocusCard';
 import {
   isOverdue,
   taskDueLabel,
@@ -120,6 +121,8 @@ export function MyWorkScreen() {
           {total > 0 ? ` · ${total} open in view` : ''}.
         </p>
       </header>
+
+      {selected ? null : <FocusCard workspaceId={activeWorkspace.id} />}
 
       {selected ? (
         <TaskDetail

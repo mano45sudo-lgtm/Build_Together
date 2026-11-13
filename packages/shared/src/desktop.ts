@@ -57,6 +57,13 @@ import type {
   SupersedeDecisionInput,
   UpdateDecisionInput,
 } from './decisions.js';
+import type {
+  CreateDismissalInput,
+  InsightKind,
+  IntelligenceDismissalView,
+  PersonalIntelligence,
+  ProjectIntelligenceOverview,
+} from './intelligence.js';
 
 /** Non-secret runtime configuration the main process resolves and hands to the renderer. */
 export interface DesktopConfig {
@@ -297,6 +304,23 @@ export interface DesktopBridge {
       commentId: string,
     ): Promise<IpcOutcome<null>>;
   };
+
+  /**
+   * Execution intelligence (Phase 7): computed on read by the server, never persisted. Dismissing
+   * only hides a signal for the caller; it never changes the task or decision behind it.
+   */
+  intelligence: {
+    overview(
+      workspaceId: string,
+      projectId: string,
+    ): Promise<IpcOutcome<ProjectIntelligenceOverview>>;
+    personal(workspaceId: string): Promise<IpcOutcome<PersonalIntelligence>>;
+    dismiss(
+      workspaceId: string,
+      input: CreateDismissalInput,
+    ): Promise<IpcOutcome<IntelligenceDismissalView>>;
+    undismiss(workspaceId: string, kind: InsightKind, dedupKey: string): Promise<IpcOutcome<null>>;
+  };
 }
 
 /** IPC channel names. Single source of truth so main and preload cannot drift. */
@@ -375,6 +399,11 @@ export const IPC = {
   DECISIONS_LIST_COMMENTS: 'decisions:list-comments',
   DECISIONS_ADD_COMMENT: 'decisions:add-comment',
   DECISIONS_DELETE_COMMENT: 'decisions:delete-comment',
+  // Execution intelligence (Phase 7 — computed on read; dismissals are per-user only)
+  INTELLIGENCE_OVERVIEW: 'intelligence:overview',
+  INTELLIGENCE_PERSONAL: 'intelligence:personal',
+  INTELLIGENCE_DISMISS: 'intelligence:dismiss',
+  INTELLIGENCE_UNDISMISS: 'intelligence:undismiss',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

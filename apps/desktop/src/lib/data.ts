@@ -1,4 +1,6 @@
 import type {
+  CreateDismissalInput,
+  InsightKind,
   AcceptInvitationInput,
   AddTaskDependencyInput,
   AssignTaskInput,
@@ -162,5 +164,14 @@ export const api = {
       unwrap(requireBridge().decisions.addComment(workspaceId, decisionId, input)),
     deleteComment: (workspaceId: string, decisionId: string, commentId: string) =>
       unwrap(requireBridge().decisions.deleteComment(workspaceId, decisionId, commentId)),
+  },
+  intelligence: {
+    overview: (workspaceId: string, projectId: string) =>
+      unwrap(requireBridge().intelligence.overview(workspaceId, projectId)),
+    personal: (workspaceId: string) => unwrap(requireBridge().intelligence.personal(workspaceId)),
+    dismiss: (workspaceId: string, input: CreateDismissalInput) =>
+      unwrap(requireBridge().intelligence.dismiss(workspaceId, input)),
+    undismiss: (workspaceId: string, kind: InsightKind, dedupKey: string) =>
+      unwrap(requireBridge().intelligence.undismiss(workspaceId, kind, dedupKey)),
   },
 };

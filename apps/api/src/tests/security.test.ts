@@ -5,7 +5,6 @@ import { makeAuthLimiter } from '../middlewares/rate-limit.js';
 import { errorHandler } from '../middlewares/error-handler.js';
 import { requestLog } from '../middlewares/request-log.js';
 import { prisma } from '../lib/prisma.js';
-import { hashPassword, verifyPassword } from '../lib/password.js';
 import { mintClerkToken, resetClerkFixtures } from '../test/clerk-fixtures.js';
 import { resetDb, TestApi } from '../test/harness.js';
 
@@ -42,17 +41,6 @@ describe('security', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  });
-
-  it('produces distinct, non-deterministic Argon2id hashes that verify correctly', async () => {
-    const pw = 'Correct-Horse-Battery-Staple';
-    const [h1, h2] = [await hashPassword(pw), await hashPassword(pw)];
-    expect(h1.startsWith('$argon2id$')).toBe(true);
-    expect(h1).not.toBe(h2); // per-hash salt
-    expect(await verifyPassword(h1, pw)).toBe(true);
-    expect(await verifyPassword(h1, pw + 'x')).toBe(false);
-    // Malformed stored hash never throws — returns false.
-    expect(await verifyPassword('not-a-hash', pw)).toBe(false);
   });
 });
 

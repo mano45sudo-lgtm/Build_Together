@@ -123,7 +123,10 @@ export interface AcceptInvitationInput {
 /** Result of creating an invitation. `delivery` is dev-only surfaced plaintext (see ADR). */
 export interface CreatedInvitation {
   invitation: InvitationSummary;
-  /** Only present when a real email transport is not configured (development mode). */
+  /**
+   * Present only when no real email transport is configured. In development it is the accept link;
+   * in production (no link exists) it is the bare invite code. The desktop join field accepts both.
+   */
   devInviteLink?: string;
 }
 

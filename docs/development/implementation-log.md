@@ -1635,3 +1635,65 @@ Postgres TLS) and the `postgres-ssl` image source (private CA; SAN `localhost` +
 `RAILWAY_PRIVATE_DOMAIN`; TLS optional server-side; CA regenerated near expiry). Open: supplying the
 CA file to Railway containers, and live verification (plan documented, needs approval).
 Runtime image also sets `NPM_CONFIG_UPDATE_NOTIFIER=false`. API unit tests 63/63.
+
+## Deployment Batch 0D-A — production configuration remediation — 2026-11-08
+
+Starting state: clean tree at `616fb99` (Batches 0A/0B already committed by the owner). All changes
+below are this batch's and are uncommitted.
+
+- **NODE_ENV** (`apps/api/src/lib/runtime-environment.ts`, used by `env.ts` and `prisma.config.ts`;
+  Dockerfile ships it): exactly `development` (default when unset), `test` or `production`; any other
+  value, casing or whitespace is refused instead of falling back to development defaults.
+- **Clerk key separation:** API refuses `sk_test_` in production (`clerk-env.ts`); production desktop
+  builds require a key and refuse `pk_test_` (`clerk-host.ts`, `electron.vite.config.ts`). No
+  issuer/publishable-key cross-check (Clerk does not document the key encoding as a contract).
+- **Invitations:** production builds no URL (`PUBLIC_APP_BASE_URL` ignored); the inviter shares the
+  bare invite code, which the existing "Have an invitation?" field already accepts. Development
+  keeps the link. Dialog wording adapts (link/code). Removing the link outright would have broken
+  invitations: acceptance needs the raw token and no email provider exists.
+- **CORS:** found one browser caller (renderer status check, packaged origin `app://bundle`).
+  Production `CORS_ORIGIN` is optional (unset = no CORS headers); if set, exactly `app://bundle` or
+  an exact public https origin. No wildcards or credentials (`config-validation.ts`).
+- **Legacy cleanup** (confirmed by ADR-0006 and the auth inventory): removed `SESSION_SECRET`,
+  `ACCESS_/REFRESH_TOKEN_TTL_SECONDS`, `lib/password.ts`, `repositories/session.repo.ts`,
+  `@node-rs/argon2` (lockfile) and its test; `.env.example` placeholders `AI_*`, `SMTP_URL` removed.
+  The `Session` table and `User.passwordHash` remain (schema out of scope).
+- **Logging/inputs:** invitee email no longer logged; production users see a neutral Clerk
+  configuration message; `x-request-id` reused only if `[A-Za-z0-9._:-]{1,128}`; Nexconn domains must
+  be absolute URLs (https in production) per the SDK's `setPrimaryBackupDomains(url, url)`.
+- **Docs:** `RAILWAY_CONFIGURATION.md` rewritten for the Docker path (no Railpack/pnpm);
+  `PRODUCTION_ENVIRONMENT.md` rewritten; `CLOUD_DEPLOYMENT_PLAN.md`, `DOCKER_IMAGE.md` corrected;
+  CA delivery design (PEM variable → private temp file, both entry points) added to
+  `DATABASE_DEPLOYMENT.md` — not implemented.
+
+**Verification.** typecheck, lint, Prettier: pass. API unit 116/116 (53 new); desktop 115/115
+(4 new). API production build passes. Production desktop build: `pk_test_` key refused; placeholder
+production key builds; bundles contain no secret patterns and no `CLERK_SECRET_KEY` string.
+**Not run:** Docker image rebuild/smoke — Docker Desktop crashed at startup on the stale
+`Docker\run\dockerInference` socket (known local issue; owner cleanup required). Known flake: the
+Clerk adapter unit test cold-imports the Clerk SDK after `vi.resetModules()` and timed out once
+(~20 s) while the machine was loaded; it passed 3/3 isolated and in the full suite afterwards.
+
+## AWS deployment (ECS Fargate + RDS) — 2026-11-13
+
+Owner chose AWS (ECS Fargate, existing domain). Added:
+
+- `infra/aws/cue-api.yaml` — one CloudFormation stack: VPC without NAT gateway (tasks in public
+  subnets reachable only from the ALB; database in isolated subnets), ACM certificate + HTTPS ALB
+  (HTTP redirects), ECS Fargate service with circuit-breaker rollback and a separate migration task
+  definition, RDS PostgreSQL 17.11 (encrypted, private, 7-day backups, deletion protection, snapshot
+  on delete), generated DB password and `DATABASE_URL` in Secrets Manager, app secret for Clerk/Nexconn,
+  ECR (immutable, scan on push), 30-day logs, GitHub OIDC deploy role limited to `main`.
+  `TRUST_PROXY_HOPS=1` (ALB is the only path). Passes `cfn-lint` 1.60.1 in us-east-1, ap-south-1,
+  eu-west-1 (PostgreSQL 16.x and bare majors are no longer creatable on RDS, hence 17.11).
+- `.github/workflows/deploy-api.yml` — manual: build + push `:sha`, one-off migration task on the new
+  image (fails the deploy on non-zero exit), stack update of `ImageTag`/`DesiredCount` only, readiness
+  check.
+- Database CA: Amazon's public RDS global bundle (114 root CAs, official truststore URL) committed at
+  `apps/api/certs/rds-global-bundle.pem` and shipped at `/app/certs/` (`.dockerignore` exception,
+  Dockerfile copy). Removes the CA-delivery blocker for AWS; `verify-full` unchanged.
+- `docs/deployment/AWS_DEPLOYMENT.md` runbook; Railway doc marked superseded; README's stale
+  Argon2/test-count claims corrected.
+
+Not run: anything against AWS; Docker image rebuild (Docker Desktop still fails on stale sockets);
+API integration suite; Prisma schema engine with the multi-CA bundle; migrations on PostgreSQL 17.
