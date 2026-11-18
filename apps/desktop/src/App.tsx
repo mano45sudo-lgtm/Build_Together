@@ -30,6 +30,16 @@ const MessagesScreen = lazy(() =>
   import('./features/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })),
 );
 
+/**
+ * Dev-only: the sign-in screens are hidden (not removed) at the owner's request while the local
+ * API/database is unavailable. Screens render their signed-out empty states; the API still
+ * requires a real session, so no data is exposed. Packaged builds always require sign-in because
+ * `import.meta.env.DEV` is false there. Set to `false` to bring the auth screens back in dev.
+ */
+const HIDE_AUTH_IN_DEV = true;
+// Tests (MODE 'test') keep exercising the real auth gate.
+const skipAuth = import.meta.env.DEV && import.meta.env.MODE !== 'test' && HIDE_AUTH_IN_DEV;
+
 function ShellContent() {
   const { status, phase, session, signOut, authError, retryAuth } = useAuth();
   const [activeId, setActiveId] = useState<NavId>('home');
@@ -56,8 +66,8 @@ function ShellContent() {
     if (activeId === 'messages') setChatMounted(true);
   }, [activeId]);
 
-  if (status === 'checking') return <AuthLoadingScreen phase={phase} />;
-  if (status === 'error') {
+  if (!skipAuth && status === 'checking') return <AuthLoadingScreen phase={phase} />;
+  if (!skipAuth && status === 'error') {
     return (
       <AuthRecovery
         message={
@@ -69,8 +79,8 @@ function ShellContent() {
       />
     );
   }
-  if (status === 'signed-out') return <WelcomeScreen />;
-  if (!session) return <AuthLoadingScreen phase="workspace" />;
+  if (!skipAuth && status === 'signed-out') return <WelcomeScreen />;
+  if (!skipAuth && !session) return <AuthLoadingScreen phase="workspace" />;
 
   const active = NAV_ITEMS.find((item) => item.id === activeId) ?? NAV_ITEMS[0]!;
 
@@ -133,7 +143,7 @@ function ShellContent() {
         activeId={activeId}
         sectionLabel={active.label}
         sectionIcon={active.icon}
-        accountName={session.user.name}
+        accountName={session?.user.name ?? 'Not signed in'}
         onSelectNav={setActiveId}
         onOpenSearch={() => setSearchOpen(true)}
         onQuickCreate={() => setQuickCreateOpen(true)}
